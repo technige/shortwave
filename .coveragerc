@@ -1,0 +1,6 @@
+[run]
+branch = False
+omit =
+    shortwave/util/compat.py
+    test/*
+    */site-packages/*
