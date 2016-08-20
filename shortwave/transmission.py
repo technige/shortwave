@@ -21,6 +21,8 @@ from socket import socket as _socket, error as socket_error, \
     AF_INET, SOCK_STREAM, IPPROTO_TCP, TCP_NODELAY, SHUT_RD, SHUT_WR
 from threading import Thread
 
+from shortwave.util.compat import integer
+
 
 log = getLogger("shortwave")
 
@@ -112,7 +114,7 @@ class EventPollReceiver(Thread):
 Receiver = EventPollReceiver
 
 
-class Protocol(object):
+class Transmission(object):
     Tx = Transmitter
     Rx = Receiver
 
@@ -132,6 +134,40 @@ class Protocol(object):
         pass
 
     def on_finish(self):
+        pass
+
+
+class Protocol(Transmission):
+
+    def __init__(self, address, *args, **kwargs):
+        super(Protocol, self).__init__(address, *args, **kwargs)
+        self.buffer = bytearray()
+        self.limit = None
+
+    def on_receive(self, view):
+        buffer = self.buffer
+        buffer[len(buffer):] = view
+        while self.buffer:
+            limit = self.limit
+            if limit is None:
+                self.on_data(buffer)
+                self.buffer.clear()
+            elif isinstance(limit, integer):
+                if len(buffer) < limit:
+                    break
+                self.on_data(buffer[:limit])
+                del buffer[:limit]
+            elif isinstance(limit, bytes):
+                end = self.buffer.find(limit)
+                if end == -1:
+                    break
+                self.on_data(self.buffer[:end])
+                end += len(limit)
+                del self.buffer[:end]
+            else:
+                raise TypeError("Unsupported limit %r" % limit)
+
+    def on_data(self, data):
         pass
 
 

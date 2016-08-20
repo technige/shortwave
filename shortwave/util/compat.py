@@ -23,7 +23,9 @@ except ImportError:
 
 
 if version_info >= (3,):
+    integer = int
     jsonable = (type(None), bool, int, float, str, list, dict)
+    unicode = str
 
     SPACE = ord(' ')
 
@@ -58,6 +60,7 @@ if version_info >= (3,):
             return str(s)
 
 else:
+    integer = (int, long)
     jsonable = (type(None), bool, int, long, float, unicode, list, dict)
 
     SPACE = b' '

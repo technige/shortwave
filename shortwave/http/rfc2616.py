@@ -20,7 +20,8 @@ from json import dumps as json_dumps
 from logging import getLogger
 
 from shortwave import Protocol, Transmitter
-from shortwave.messaging import SP, CR_LF, HeaderDict, header_names, Buffer
+from shortwave.messaging import SP, CR_LF, HeaderDict, header_names
+from shortwave.numbers import HTTP_PORT
 from shortwave.uri import parse_uri_authority, parse_uri
 from shortwave.util.compat import bstr, jsonable
 
@@ -105,8 +106,6 @@ class HTTPTransmitter(Transmitter):
 class HTTP(Protocol):
     Tx = HTTPTransmitter
 
-    default_port = 80
-
     def __init__(self, authority):
         user_info, host, port = parse_uri_authority(authority)
         headers = {}
@@ -116,83 +115,74 @@ class HTTP(Protocol):
             headers[b"Host"] = host + b":" + bstr(port)
         else:
             headers[b"Host"] = host
-        super(HTTP, self).__init__((host, port) or self.default_port, headers)
-        self.response_state = 0
-        self.buffer = Buffer()
-
-    def request(self, method, uri, body=None, **headers):
-        self.transmitter.request(method, uri, body, **headers)
+        super(HTTP, self).__init__((host, port) or HTTP_PORT, headers)
+        self.receiving = 0
+        self.limit = b"\r\n"
 
     def options(self, uri=b"*", body=None, **headers):
         """ Make an OPTIONS request to the remote host.
         """
-        return self.request(b"OPTIONS", uri, body, **headers)
+        return self.transmitter.request(b"OPTIONS", uri, body, **headers)
 
     def get(self, uri, **headers):
         """ Make a GET request to the remote host.
         """
-        return self.request(b"GET", uri, **headers)
+        return self.transmitter.request(b"GET", uri, **headers)
 
     def head(self, uri, **headers):
         """ Make a HEAD request to the remote host.
         """
-        return self.request(b"HEAD", uri, **headers)
+        return self.transmitter.request(b"HEAD", uri, **headers)
 
     def post(self, uri, body=None, **headers):
         """ Make a POST request to the remote host.
         """
-        return self.request(b"POST", uri, body, **headers)
+        return self.transmitter.request(b"POST", uri, body, **headers)
 
     def put(self, uri, body=None, **headers):
         """ Make a PUT request to the remote host.
         """
-        return self.request(b"PUT", uri, body, **headers)
+        return self.transmitter.request(b"PUT", uri, body, **headers)
 
     def patch(self, uri, body=None, **headers):
         """ Make a PATCH request to the remote host.
         """
-        return self.request(b"PATCH", uri, body, **headers)
+        return self.transmitter.request(b"PATCH", uri, body, **headers)
 
     def delete(self, uri, **headers):
         """ Make a DELETE request to the remote host.
         """
-        return self.request(b"DELETE", uri, **headers)
+        return self.transmitter.request(b"DELETE", uri, **headers)
 
     def trace(self, uri, body=None, **headers):
         """ Make a TRACE request to the remote host.
         """
-        return self.request(b"TRACE", uri, body, **headers)
+        return self.transmitter.request(b"TRACE", uri, body, **headers)
 
-    def on_receive(self, view):
-        self.buffer.write(view.tobytes())
-        while self.buffer:
-            if self.response_state == 0:
-                line = self.buffer.read_line()
-                if line is None:
-                    break
-                http_version, status_code, reason_phrase = line.split(SP, 2)
-                self.on_status_line(http_version, int(status_code), reason_phrase)
-                self.response_state = 1
-            elif self.response_state == 1:
-                line = self.buffer.read_line()
-                if line is None:
-                    break
-                if line == b"":
-                    self.response_state = 2
-                else:
-                    name, _, value = line.partition(b":")
-                    self.on_header_line(name, value.lstrip())
+    def on_data(self, data):
+        # TODO: built-in state machine
+        if self.receiving == 0:
+            log.info("[HTTP] Rx: %s", data)
+            http_version, status_code, reason_phrase = data.split(SP, 2)
+            self.on_status_line(http_version, int(status_code), reason_phrase)
+            self.receiving = 1
+        elif self.receiving == 1:
+            if data:
+                log.info("[HTTP] Rx: %s", data)
+                name, _, value = data.partition(b":")
+                self.on_header_line(name, value.lstrip())
             else:
-                from sys import stdout
-                stdout.write(self.buffer.read().decode("ISO-8859-1"))
+                self.receiving = 2
+                self.limit = None  # TODO: substitute with content-length (or chunking)
+        else:
+            from sys import stdout
+            stdout.write(data.decode("ISO-8859-1"))
 
     def on_status_line(self, http_version, status_code, reason_phrase):
-        log.info("[HTTP] Rx: HTTP Version: %s", http_version)
-        log.info("[HTTP] Rx: Status Code: %d", status_code)
-        log.info("[HTTP] Rx: Reason Phrase: %s", reason_phrase)
+        pass
 
     def on_header_line(self, name, value):
-        log.info("[HTTP] Rx: %s: %s", name, value)
+        pass
 
 
 def basic_auth(*args):
@@ -205,6 +195,6 @@ def get(uri, **headers):
     scheme, authority, path, query, fragment = parse_uri(uri)
     http = HTTP(authority)
     try:
-        return http.request(b"GET", uri, **headers)
+        return http.get(uri, **headers)
     finally:
         http.finish()

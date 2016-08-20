@@ -126,43 +126,6 @@ class HeaderDict(dict):
         return b"".join(b"%s: %s%s" % (name, value, CR_LF) for name, value in sorted(self.items()))
 
 
-class Buffer(object):
-    # TODO: make this more efficient, allocation-wise
-
-    def __init__(self):
-        self.data = b""
-
-    def __len__(self):
-        return len(self.data)
-
-    def __bool__(self):
-        return bool(self.data)
-
-    def __nonzero__(self):
-        return bool(self.data)
-
-    def write(self, data):
-        self.data += data
-
-    def read(self, size=-1):
-        if 0 <= size <= len(self.data):
-            data = self.data[:size]
-            self.data = self.data[size:]
-        else:
-            data = self.data
-            self.data = b""
-        return data
-
-    def read_line(self):
-        eol = self.data.find(CR_LF)
-        if eol >= 0:
-            data = self.data[:eol]
-            self.data = self.data[(eol + 2):]
-        else:
-            data = None
-        return data
-
-
 def parse_header(value):
     if value is None:
         return None, None
