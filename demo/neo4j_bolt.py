@@ -18,11 +18,11 @@
 
 from logging import DEBUG
 
-from shortwave.transmission import Dialogue
+from shortwave.transmission import Transceiver
 from shortwave.util.watcher import watch
 
 
-class Bolt(Dialogue):
+class Bolt(Transceiver):
 
     def ack_failure(self):
         self.transmitter.transmit(b"\x00\x02\xB0\x0E\x00\x00")
@@ -60,7 +60,7 @@ def main():
     bolt = Bolt("neo4j:neo4j@127.0.0.1:7687")
     bolt.run("UNWIND range(1, 10) AS n RETURN n", {})
     bolt.pull_all()
-    bolt.finish()
+    bolt.stop()
 
 
 if __name__ == "__main__":

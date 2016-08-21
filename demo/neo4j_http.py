@@ -24,11 +24,11 @@ from shortwave.util.watcher import watch
 
 def main():
     watch("shortwave", level=DEBUG)
-    # http = HTTP("neo4j:neo4j@127.0.0.1:7474")
-    # http.on_end = lambda: http.close()
-    # http.post(b"/db/data/cypher", {"query": "UNWIND range(1, 2000) AS n RETURN n"})
-    # http.finish()
-    post(b"http://neo4j:neo4j@127.0.0.1:7474/db/data/cypher", {"query": "UNWIND range(1, 2000) AS n RETURN n"})
+    http = HTTP("neo4j:neo4j@127.0.0.1:7474")
+    http.post(b"/db/data/cypher", {"query": "UNWIND range(1, 2000) AS n RETURN n"})
+    http.stop()
+    # post(b"http://neo4j:neo4j@127.0.0.1:7474/db/data/cypher",
+    #      {"query": "UNWIND range(1, 20000) AS n RETURN n"})
 
 
 if __name__ == "__main__":

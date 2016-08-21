@@ -15,7 +15,7 @@ So far, Shortwave consists of the following:
 
 Low-level components for TCP communication.
 This layer sits just above raw sockets.
-It hosts a synchronous `Transmitter` and an asynchronous `Receiver` that are brought together within an extensible `Protocol` object.
+It hosts a synchronous `Transmitter` and an asynchronous `Receiver` that are brought together within an extensible `Connection` object.
 
 
 ## `shortwave.messaging`

@@ -117,7 +117,7 @@ def parse_uri(uri):
     return scheme, auth, path, query, fragment
 
 
-def parse_uri_authority(authority):
+def parse_authority(authority):
     user_info = host = port = None
 
     if authority is not None:
@@ -193,8 +193,8 @@ def resolve_uri(base_uri, ref_uri, strict=True):
             target_auth = base_auth
         target_scheme = base_scheme
     target_fragment = ref_fragment
-    return uri(scheme=target_scheme, authority=target_auth, path=target_path,
-               query=target_query, fragment=target_fragment)
+    return build_uri(scheme=target_scheme, authority=target_auth, path=target_path,
+                     query=target_query, fragment=target_fragment)
 
 
 def merge_paths(base_auth, base_path, ref_path):
@@ -245,7 +245,7 @@ def remove_dot_segments(path):
     return new_path
 
 
-def uri_authority(user_info=None, host=None, port=None, **parts):
+def build_authority(user_info=None, host=None, port=None, **parts):
     """ Build a URI authority
 
     - authority
@@ -258,9 +258,9 @@ def uri_authority(user_info=None, host=None, port=None, **parts):
 
     Section 3.2.
     """
-    u, h, p = parse_uri_authority(parts.get("authority"))
+    u, h, p = parse_authority(parts.get("authority"))
     if parts.get("host_port") is not None:
-        _, h, p = parse_uri_authority(parts["host_port"])
+        _, h, p = parse_authority(parts["host_port"])
     if user_info is not None:
         u = bstr(user_info)
     if host is not None:
@@ -277,7 +277,7 @@ def uri_authority(user_info=None, host=None, port=None, **parts):
     return b"".join(result)
 
 
-def uri(scheme=None, authority=None, path=None, query=None, fragment=None, **parts):
+def build_uri(scheme=None, authority=None, path=None, query=None, fragment=None, **parts):
     """ Build a URI object from named parts. The part names available are:
 
     - uri
@@ -296,7 +296,7 @@ def uri(scheme=None, authority=None, path=None, query=None, fragment=None, **par
     See: RFC 3986, section 5.3
     """
     s, a, p, q, f = parse_uri(parts.get("uri"))
-    _authority = uri_authority(authority=authority, **parts)
+    _authority = build_authority(authority=authority, **parts)
     if parts.get("hierarchical_part") is not None:
         _, a, p, _, _ = parse_uri(parts["hierarchical_part"])
     if parts.get("absolute_path_reference") is not None:

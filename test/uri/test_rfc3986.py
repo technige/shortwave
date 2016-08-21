@@ -18,8 +18,8 @@
 from collections import OrderedDict
 from unittest import TestCase
 
-from shortwave.uri.rfc3986 import percent_encode, percent_decode, parse_uri, resolve_uri, uri, \
-    parse_uri_authority
+from shortwave.uri.rfc3986 import percent_encode, percent_decode, parse_uri, resolve_uri, build_uri, \
+    parse_authority
 from shortwave.util.compat import ustr
 
 
@@ -116,43 +116,43 @@ class ParseAuthorityTestCase(TestCase):
     """
     
     def test_can_parse_none_authority(self):
-        user_info, host, port = parse_uri_authority(None)
+        user_info, host, port = parse_authority(None)
         assert user_info is None
         assert host is None
         assert port is None
         
     def test_can_parse_empty_authority(self):
-        user_info, host, port = parse_uri_authority("")
+        user_info, host, port = parse_authority("")
         assert user_info is None
         assert host == b""
         assert port is None
         
     def test_can_parse_host_authority(self):
-        user_info, host, port = parse_uri_authority("example.com")
+        user_info, host, port = parse_authority("example.com")
         assert user_info is None
         assert host == b"example.com"
         assert port is None
         
     def test_can_parse_host_port_authority(self):
-        user_info, host, port = parse_uri_authority("example.com:6789")
+        user_info, host, port = parse_authority("example.com:6789")
         assert user_info is None
         assert host == b"example.com"
         assert port == 6789
         
     def test_can_parse_user_host_authority(self):
-        user_info, host, port = parse_uri_authority("bob@example.com")
+        user_info, host, port = parse_authority("bob@example.com")
         assert user_info == b"bob"
         assert host == b"example.com"
         assert port is None
         
     def test_can_parse_email_user_host_authority(self):
-        user_info, host, port = parse_uri_authority("bob@example.com@example.com")
+        user_info, host, port = parse_authority("bob@example.com@example.com")
         assert user_info == b"bob@example.com"
         assert host == b"example.com"
         assert port is None
         
     def test_can_parse_full_authority(self):
-        user_info, host, port = parse_uri_authority("bob@example.com:6789")
+        user_info, host, port = parse_authority("bob@example.com:6789")
         assert user_info == b"bob"
         assert host == b"example.com"
         assert port == 6789
@@ -377,67 +377,67 @@ class URIConstructionTestCase(TestCase):
     """
 
     def test_can_build_empty_uri(self):
-        built = uri()
+        built = build_uri()
         assert built is b""
 
     def test_can_build_uri_from_string(self):
-        built = uri(uri="foo://example.com/")
+        built = build_uri(uri="foo://example.com/")
         assert built == b"foo://example.com/"
 
     def test_can_build_uri_from_hierarchical_part(self):
-        built = uri(hierarchical_part="//example.com/")
+        built = build_uri(hierarchical_part="//example.com/")
         assert built == b"//example.com/"
 
     def test_can_build_uri_from_scheme_and_hierarchical_part(self):
-        built = uri(scheme="foo", hierarchical_part="//example.com/")
+        built = build_uri(scheme="foo", hierarchical_part="//example.com/")
         assert built == b"foo://example.com/"
 
     def test_can_build_uri_from_scheme_hierarchical_part_and_query(self):
-        built = uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs")
+        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs")
         assert built == b"foo://example.com/?spam=eggs"
 
     def test_can_build_uri_from_scheme_hierarchical_part_query_and_fragment(self):
-        built = uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs",
-                    fragment="mustard")
+        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs",
+                          fragment="mustard")
         assert built == b"foo://example.com/?spam=eggs#mustard"
 
     def test_can_build_uri_from_absolute_path_reference(self):
-        built = uri(absolute_path_reference="/foo/bar?spam=eggs#mustard")
+        built = build_uri(absolute_path_reference="/foo/bar?spam=eggs#mustard")
         assert built == b"/foo/bar?spam=eggs#mustard"
 
     def test_can_build_uri_from_authority_and_absolute_path_reference(self):
-        built = uri(authority="bob@example.com:9999",
-                    absolute_path_reference="/foo/bar?spam=eggs#mustard")
+        built = build_uri(authority="bob@example.com:9999",
+                          absolute_path_reference="/foo/bar?spam=eggs#mustard")
         assert built == b"//bob@example.com:9999/foo/bar?spam=eggs#mustard"
 
     def test_can_build_uri_from_scheme_host_and_path(self):
-        built = uri(scheme="http", host="example.com", path="/foo/bar")
+        built = build_uri(scheme="http", host="example.com", path="/foo/bar")
         assert built == b"http://example.com/foo/bar"
 
     def test_can_build_uri_from_scheme_and_host_port(self):
-        built = uri(scheme="http", host_port="example.com:3456")
+        built = build_uri(scheme="http", host_port="example.com:3456")
         assert built == b"http://example.com:3456"
 
     def test_can_build_uri_from_scheme_authority_and_host_port(self):
-        built = uri(scheme="http", authority="bob@example.net:4567", host_port="example.com:3456")
+        built = build_uri(scheme="http", authority="bob@example.net:4567", host_port="example.com:3456")
         assert built == b"http://bob@example.com:3456"
 
     def test_can_build_uri_from_scheme_user_info_and_host_port(self):
-        built = uri(scheme="http", user_info="bob", host_port="example.com:3456")
+        built = build_uri(scheme="http", user_info="bob", host_port="example.com:3456")
         assert built == b"http://bob@example.com:3456"
 
     def test_can_build_uri_from_scheme_user_info_and_path(self):
-        built = uri(scheme="http", user_info="bob", path="/foo")
+        built = build_uri(scheme="http", user_info="bob", path="/foo")
         assert built == b"http://bob@/foo"
 
     def test_can_build_uri_from_scheme_authority_and_host(self):
-        built = uri(scheme="http", authority="bob@example.net", host="example.com")
+        built = build_uri(scheme="http", authority="bob@example.net", host="example.com")
         assert built == b"http://bob@example.com"
 
     def test_can_build_uri_from_scheme_authority_and_port(self):
-        built = uri(scheme="http", authority="bob@example.com", port=3456)
+        built = build_uri(scheme="http", authority="bob@example.com", port=3456)
         assert built == b"http://bob@example.com:3456"
 
     def test_can_build_uri_from_scheme_port_and_path(self):
-        built = uri(scheme="http", port=3456, path="/foo")
+        built = build_uri(scheme="http", port=3456, path="/foo")
         assert built == b"http://:3456/foo"

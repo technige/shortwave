@@ -19,10 +19,10 @@ from base64 import b64encode
 from json import dumps as json_dumps
 from logging import getLogger
 
-from shortwave import Protocol, Transmitter
+from shortwave import Connection, Transmitter
 from shortwave.messaging import SP, CR_LF, HeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
-from shortwave.uri import parse_uri_authority, parse_uri, uri as build_uri
+from shortwave.uri import parse_authority, parse_uri, build_uri
 from shortwave.util.compat import bstr, jsonable
 
 HTTP_VERSION = b"HTTP/1.1"
@@ -107,50 +107,54 @@ class HTTPResponse(object):
 
     state = None
 
-    def __init__(self, protocol):
-        self.protocol = protocol
+    def __init__(self, connection):
+        self.connection = connection
+        self.fd = self.connection.socket.fileno()
         self.headers = HeaderDict()
         self.reset()
 
     def reset(self):
         self.headers.clear()
-        self.protocol.limit = b"\r\n"
+        self.connection.limit = b"\r\n"
         self.state = self.receiving_status_line
 
     def append(self, data):
         self.state(data)
 
     def receiving_status_line(self, data):
-        log.info("[HTTP] Rx: %s", data)
+        log.info("R[%d]: [HTTP] %s", self.fd, data)
         http_version, status_code, reason_phrase = data.split(SP, 2)
-        self.protocol.on_status_line(http_version, int(status_code), reason_phrase)
+        self.connection.on_status_line(http_version, int(status_code), reason_phrase)
         self.state = self.receiving_headers
 
     def receiving_headers(self, data):
         if data:
-            log.info("[HTTP] Rx: %s", data)
+            log.info("R[%d]: [HTTP] %s", self.fd, data)
             name, _, value = data.partition(b":")
             value = value.strip()
-            self.protocol.on_header(name, value)
+            self.connection.on_header(name, value)
             self.headers[name] = value
         else:
-            self.protocol.limit = int(self.headers["content-length"])  # TODO: substitute with content-length (or chunking)
+            self.connection.limit = int(self.headers["content-length"])  # TODO: substitute with content-length (or chunking)
             self.state = self.receiving_fixed_length_body
 
     def receiving_fixed_length_body(self, data):
-        log.info("[HTTP] Rx: %s", data)
-        self.protocol.on_body(data)
-        self.protocol.limit -= len(data)
-        if self.protocol.limit == 0:
-            self.protocol.on_end()
-            self.reset()
+        log.info("R[%d]: [HTTP] b*%d", self.fd, len(data))
+        self.connection.on_body(data)
+        self.connection.limit -= len(data)
+        if self.connection.limit == 0:
+            self.connection.on_end()
+            if self.headers.get("connection", "").lower() == "close":
+                self.connection.close()
+            else:
+                self.reset()
 
 
-class HTTP(Protocol):
+class HTTP(Connection):
     Tx = HTTPTransmitter
 
     def __init__(self, authority):
-        user_info, host, port = parse_uri_authority(authority)
+        user_info, host, port = parse_authority(authority)
         headers = {}
         if user_info:
             headers[b"Authorization"] = basic_auth(user_info)
@@ -229,16 +233,16 @@ def get(uri, **headers):
     try:
         return http.get(uri, **headers)
     finally:
-        http.finish()
+        http.stop()
 
 
 def post(uri, body, **headers):
     """ Make a POST request to a URI.
     """
     scheme, authority, path, query, fragment = parse_uri(uri)
+    ref_uri = build_uri(path=path, query=query, fragment=fragment)
     http = HTTP(authority)
-    uri = build_uri(path=path, query=query, fragment=fragment)
     try:
-        return http.post(uri, body, connection="close", **headers)
+        return http.post(ref_uri, body, connection="close", **headers)
     finally:
-        http.finish()
+        http.stop()
