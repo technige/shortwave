@@ -123,7 +123,10 @@ class HeaderDict(dict):
         return list(value for _, value in super(HeaderDict, self).values())
 
     def to_bytes(self):
-        return b"".join(b"%s: %s%s" % (name, value, CR_LF) for name, value in sorted(self.items()))
+        b = []
+        for name, value in sorted(self.items()):
+            b += [name, b": ", value, CR_LF]
+        return b"".join(b)
 
 
 def parse_header(value):

@@ -18,11 +18,11 @@
 
 from logging import DEBUG
 
-from shortwave.transmission import Transmission
+from shortwave.transmission import Dialogue
 from shortwave.util.watcher import watch
 
 
-class Bolt(Transmission):
+class Bolt(Dialogue):
 
     def ack_failure(self):
         self.transmitter.transmit(b"\x00\x02\xB0\x0E\x00\x00")

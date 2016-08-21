@@ -54,7 +54,7 @@ if version_info >= (3,):
         """
         if isinstance(s, str):
             return s
-        elif isinstance(s, bytes):
+        elif isinstance(s, (bytes, bytearray)):
             return s.decode(encoding)
         else:
             return str(s)

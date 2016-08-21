@@ -22,7 +22,7 @@ from logging import getLogger
 from shortwave import Protocol, Transmitter
 from shortwave.messaging import SP, CR_LF, HeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
-from shortwave.uri import parse_uri_authority, parse_uri
+from shortwave.uri import parse_uri_authority, parse_uri, uri as build_uri
 from shortwave.util.compat import bstr, jsonable
 
 HTTP_VERSION = b"HTTP/1.1"
@@ -103,6 +103,49 @@ class HTTPTransmitter(Transmitter):
                      request_headers.to_bytes(), CR_LF, body)
 
 
+class HTTPResponse(object):
+
+    state = None
+
+    def __init__(self, protocol):
+        self.protocol = protocol
+        self.headers = HeaderDict()
+        self.reset()
+
+    def reset(self):
+        self.headers.clear()
+        self.protocol.limit = b"\r\n"
+        self.state = self.receiving_status_line
+
+    def append(self, data):
+        self.state(data)
+
+    def receiving_status_line(self, data):
+        log.info("[HTTP] Rx: %s", data)
+        http_version, status_code, reason_phrase = data.split(SP, 2)
+        self.protocol.on_status_line(http_version, int(status_code), reason_phrase)
+        self.state = self.receiving_headers
+
+    def receiving_headers(self, data):
+        if data:
+            log.info("[HTTP] Rx: %s", data)
+            name, _, value = data.partition(b":")
+            value = value.strip()
+            self.protocol.on_header(name, value)
+            self.headers[name] = value
+        else:
+            self.protocol.limit = int(self.headers["content-length"])  # TODO: substitute with content-length (or chunking)
+            self.state = self.receiving_fixed_length_body
+
+    def receiving_fixed_length_body(self, data):
+        log.info("[HTTP] Rx: %s", data)
+        self.protocol.on_body(data)
+        self.protocol.limit -= len(data)
+        if self.protocol.limit == 0:
+            self.protocol.on_end()
+            self.reset()
+
+
 class HTTP(Protocol):
     Tx = HTTPTransmitter
 
@@ -116,13 +159,12 @@ class HTTP(Protocol):
         else:
             headers[b"Host"] = host
         super(HTTP, self).__init__((host, port) or HTTP_PORT, headers)
-        self.receiving = 0
-        self.limit = b"\r\n"
+        self.response = HTTPResponse(self)
 
-    def options(self, uri=b"*", body=None, **headers):
+    def options(self, uri=b"*", **headers):
         """ Make an OPTIONS request to the remote host.
         """
-        return self.transmitter.request(b"OPTIONS", uri, body, **headers)
+        return self.transmitter.request(b"OPTIONS", uri, **headers)
 
     def get(self, uri, **headers):
         """ Make a GET request to the remote host.
@@ -134,17 +176,17 @@ class HTTP(Protocol):
         """
         return self.transmitter.request(b"HEAD", uri, **headers)
 
-    def post(self, uri, body=None, **headers):
+    def post(self, uri, body, **headers):
         """ Make a POST request to the remote host.
         """
         return self.transmitter.request(b"POST", uri, body, **headers)
 
-    def put(self, uri, body=None, **headers):
+    def put(self, uri, body, **headers):
         """ Make a PUT request to the remote host.
         """
         return self.transmitter.request(b"PUT", uri, body, **headers)
 
-    def patch(self, uri, body=None, **headers):
+    def patch(self, uri, body, **headers):
         """ Make a PATCH request to the remote host.
         """
         return self.transmitter.request(b"PATCH", uri, body, **headers)
@@ -154,34 +196,24 @@ class HTTP(Protocol):
         """
         return self.transmitter.request(b"DELETE", uri, **headers)
 
-    def trace(self, uri, body=None, **headers):
+    def trace(self, uri, **headers):
         """ Make a TRACE request to the remote host.
         """
-        return self.transmitter.request(b"TRACE", uri, body, **headers)
+        return self.transmitter.request(b"TRACE", uri, **headers)
 
     def on_data(self, data):
-        # TODO: built-in state machine
-        if self.receiving == 0:
-            log.info("[HTTP] Rx: %s", data)
-            http_version, status_code, reason_phrase = data.split(SP, 2)
-            self.on_status_line(http_version, int(status_code), reason_phrase)
-            self.receiving = 1
-        elif self.receiving == 1:
-            if data:
-                log.info("[HTTP] Rx: %s", data)
-                name, _, value = data.partition(b":")
-                self.on_header_line(name, value.lstrip())
-            else:
-                self.receiving = 2
-                self.limit = None  # TODO: substitute with content-length (or chunking)
-        else:
-            from sys import stdout
-            stdout.write(data.decode("ISO-8859-1"))
+        self.response.append(data)
 
     def on_status_line(self, http_version, status_code, reason_phrase):
         pass
 
-    def on_header_line(self, name, value):
+    def on_header(self, name, value):
+        pass
+
+    def on_body(self, data):
+        pass
+
+    def on_end(self):
         pass
 
 
@@ -196,5 +228,17 @@ def get(uri, **headers):
     http = HTTP(authority)
     try:
         return http.get(uri, **headers)
+    finally:
+        http.finish()
+
+
+def post(uri, body, **headers):
+    """ Make a POST request to a URI.
+    """
+    scheme, authority, path, query, fragment = parse_uri(uri)
+    http = HTTP(authority)
+    uri = build_uri(path=path, query=query, fragment=fragment)
+    try:
+        return http.post(uri, body, connection="close", **headers)
     finally:
         http.finish()

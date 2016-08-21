@@ -28,6 +28,10 @@ log = getLogger("shortwave")
 
 
 class Transmitter(object):
+    """ A Transmitter handles the outgoing half of a network conversation.
+    Transmission is synchronous and will block until all data has been
+    sent.
+    """
 
     finished = False
 
@@ -41,18 +45,24 @@ class Transmitter(object):
 
     def finish(self):
         if not self.finished:
-            self.socket.shutdown(SHUT_WR)
-            self.finished = True
+            try:
+                self.socket.shutdown(SHUT_WR)
+            except socket_error as error:
+                log.error("Tx: <shutdown> - %s", error)
+            else:
+                log.debug("Tx: <shutdown>")
+            finally:
+                self.finished = True
 
 
-class EventPollReceiver(Thread):
-
-    running = True
+class Receiver(Thread):
+    """ An Receiver handles the incoming halves of one or more network
+    conversations.
+    """
 
     def __init__(self):
-        super(EventPollReceiver, self).__init__()
+        super(Receiver, self).__init__()
         self.clients = {}
-        self.poll = epoll()
 
     def __len__(self):
         return len(self.clients)
@@ -62,24 +72,48 @@ class EventPollReceiver(Thread):
         buffer = bytearray(buffer_size)
         view = memoryview(buffer)
         self.clients[fd] = (socket, buffer, view, on_receive, on_finish)
-        self.poll.register(fd, EPOLLET | EPOLLIN)
 
     def detach(self, socket):
         fd = socket.fileno()
         try:
             socket.shutdown(SHUT_RD)
-        except socket_error as error:
-            if error.errno == 107:
-                # they must have closed first
-                pass
-            else:
-                raise
-        self.poll.unregister(fd)
-        del self.clients[fd]
+        except socket_error:
+            pass
+        try:
+            del self.clients[fd]
+        except KeyError:
+            pass
 
     def run(self):
-        while self.running:
+        raise NotImplementedError()
+
+
+class EventPollReceiver(Receiver):
+    """ An implementation of Receiver that uses epoll.
+    """
+
+    def __init__(self):
+        super(EventPollReceiver, self).__init__()
+        self.poll = epoll()
+
+    def __del__(self):
+        self.close()
+
+    def attach(self, socket, on_receive, on_finish, buffer_size=8192):
+        super(EventPollReceiver, self).attach(socket, on_receive, on_finish, buffer_size)
+        self.poll.register(socket.fileno(), EPOLLET | EPOLLIN)
+
+    def detach(self, socket):
+        super(EventPollReceiver, self).detach(socket)
+        fd = socket.fileno()
+        if fd >= 0:
+            self.poll.unregister(fd)
+
+    def run(self):
+        while self.clients:
             events = self.poll.poll(1)
+            if not self.clients:
+                break
             for fd, event in events:
                 socket, buffer, view, on_receive, on_finish = self.clients[fd]
                 recv_into = socket.recv_into
@@ -90,7 +124,9 @@ class EventPollReceiver(Thread):
                         try:
                             receiving = recv_into(buffer)
                         except socket_error as error:
-                            if error.errno == 11:
+                            if error.errno == 9:
+                                receiving = 0
+                            elif error.errno == 11:
                                 pass
                             else:
                                 raise
@@ -104,19 +140,17 @@ class EventPollReceiver(Thread):
                 else:
                     raise RuntimeError(event)
 
-    def stop(self):
-        for fd in list(self.clients):
-            self.detach(self.clients[fd][0])
+    def close(self):
         self.poll.close()
-        self.running = False
 
 
-Receiver = EventPollReceiver
+class Dialogue(object):
+    """ A Dialogue represents a two-way conversation by blending a
+    Transmitter with a Receiver.
+    """
 
-
-class Transmission(object):
     Tx = Transmitter
-    Rx = Receiver
+    Rx = EventPollReceiver  # TODO: adjust based on platform capabilities
 
     def __init__(self, address, *args, **kwargs):
         self.socket = new_socket(address)
@@ -130,6 +164,11 @@ class Transmission(object):
     def finish(self):
         self.transmitter.finish()
 
+    def close(self):
+        self.finish()
+        self.receiver.detach(self.socket)
+        self.socket.close()
+
     def on_receive(self, view):
         pass
 
@@ -137,35 +176,41 @@ class Transmission(object):
         pass
 
 
-class Protocol(Transmission):
+class Protocol(Dialogue):
+    """ A Protocol applies structure to a Dialogue. This is primarily
+    achieved through the presence of a buffer that is used to collect
+    incoming data and deliver it in a controlled way via a programmable
+    limiter.
+    """
+
+    limit = None
 
     def __init__(self, address, *args, **kwargs):
         super(Protocol, self).__init__(address, *args, **kwargs)
         self.buffer = bytearray()
-        self.limit = None
 
     def on_receive(self, view):
         buffer = self.buffer
         buffer[len(buffer):] = view
-        while self.buffer:
+        while buffer:
             limit = self.limit
             if limit is None:
                 self.on_data(buffer)
-                self.buffer.clear()
+                del buffer[:]
             elif isinstance(limit, integer):
                 if len(buffer) < limit:
                     break
                 self.on_data(buffer[:limit])
                 del buffer[:limit]
             elif isinstance(limit, bytes):
-                end = self.buffer.find(limit)
+                end = buffer.find(limit)
                 if end == -1:
                     break
-                self.on_data(self.buffer[:end])
+                self.on_data(buffer[:end])
                 end += len(limit)
-                del self.buffer[:end]
+                del buffer[:end]
             else:
-                raise TypeError("Unsupported limit %r" % limit)
+                raise TypeError("Unsupported limiter %r" % limit)
 
     def on_data(self, data):
         pass
@@ -179,13 +224,16 @@ def new_socket(address):
     return socket
 
 
-def new_single_use_receiver(protocol):
-    receiver = protocol.Rx()
+def new_single_use_receiver(dialogue):
+    receiver = dialogue.Rx()
 
     def on_finish():
-        protocol.on_finish()
-        receiver.stop()
-        protocol.socket.close()
+        dialogue.on_finish()
+        receiver.detach(dialogue.socket)
+        try:
+            dialogue.socket.shutdown(SHUT_RD)
+        except socket_error:
+            pass
 
-    receiver.attach(protocol.socket, protocol.on_receive, on_finish)
+    receiver.attach(dialogue.socket, dialogue.on_receive, on_finish)
     return receiver
