@@ -16,14 +16,16 @@
 # limitations under the License.
 
 from base64 import b64encode
-from json import dumps as json_dumps
+from collections import deque
+from json import dumps as json_dumps, loads as json_loads
 from logging import getLogger
+from time import sleep
 
 from shortwave import Connection, Transmitter
-from shortwave.messaging import SP, CR_LF, HeaderDict, header_names
+from shortwave.messaging import SP, CR_LF, HeaderDict, header_names, parse_header
 from shortwave.numbers import HTTP_PORT
 from shortwave.uri import parse_authority, parse_uri, build_uri
-from shortwave.util.compat import bstr, jsonable
+from shortwave.util.compat import bstr
 
 HTTP_VERSION = b"HTTP/1.1"
 
@@ -88,12 +90,14 @@ class HTTPTransmitter(Transmitter):
                     chunk = bstr(chunk)
                 chunk_size = len(chunk)
                 if chunk_size:
-                    transmit(b"%X" % chunk_size, CR_LF, chunk, CR_LF)
+                    transmit("{:X}".format(chunk_size).encode("utf-8"), CR_LF, chunk, CR_LF)
             transmit(b"0", CR_LF, CR_LF)
 
         else:
             # Fixed-length content
-            if isinstance(body, jsonable):
+            if body is None:
+                body = b""
+            elif isinstance(body, dict):
                 request_headers[b"Content-Type"] = b"application/json"
                 body = json_dumps(body, separators=",:", ensure_ascii=True).encode("UTF-8")
             elif not isinstance(body, bytes):
@@ -107,59 +111,11 @@ class HTTPTransmitter(Transmitter):
                      request_headers.to_bytes(), CR_LF, body)
 
 
-class HTTPResponse(object):
-
-    state = None
-
-    def __init__(self, connection):
-        self.connection = connection
-        self.fd = self.connection.socket.fileno()
-        self.headers = HeaderDict()
-        self.reset()
-
-    def reset(self):
-        self.headers.clear()
-        self.connection.limit = b"\r\n"
-        self.state = self.receiving_status_line
-
-    def append(self, data):
-        self.state(data)
-
-    def receiving_status_line(self, data):
-        log.info("R[%d]: [HTTP] %s", self.fd, data)
-        http_version, status_code, reason_phrase = data.split(SP, 2)
-        self.connection.on_status_line(http_version, int(status_code), reason_phrase)
-        self.state = self.receiving_headers
-
-    def receiving_headers(self, data):
-        if data:
-            log.info("R[%d]: [HTTP] %s", self.fd, data)
-            name, _, value = data.partition(b":")
-            value = value.strip()
-            self.connection.on_header(name, value)
-            self.headers[name] = value
-        else:
-            self.connection.limit = int(self.headers["content-length"])  # TODO: substitute with content-length (or chunking)
-            self.state = self.receiving_fixed_length_body
-
-    def receiving_fixed_length_body(self, data):
-        log.info("R[%d]: [HTTP] b*%d", self.fd, len(data))
-        self.connection.on_body(data)
-        self.connection.limit -= len(data)
-        if self.connection.limit == 0:
-            self.connection.on_end()
-            if self.headers.get("connection", "").lower() == "close":
-                self.connection.close()
-            else:
-                self.reset()
-
-
 class HTTP(Connection):
     Tx = HTTPTransmitter
 
-    def __init__(self, authority):
+    def __init__(self, authority, **headers):
         user_info, host, port = parse_authority(authority)
-        headers = {}
         if user_info:
             headers[b"Authorization"] = basic_auth(user_info)
         if port:
@@ -167,86 +123,224 @@ class HTTP(Connection):
         else:
             headers[b"Host"] = host
         super(HTTP, self).__init__((host, port or HTTP_PORT), headers)
-        self.response = HTTPResponse(self)
+        self.data_limit = b"\r\n"
+        self.responses = deque()
+        self.response_handler = self.on_status_line
+        self.response_headers = HeaderDict()
 
-    def options(self, uri=b"*", **headers):
+    def options(self, uri=b"*", response=None, **headers):
         """ Make an OPTIONS request to the remote host.
         """
-        return self.transmitter.request(b"OPTIONS", uri, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"OPTIONS", uri, **headers)
+        return response
 
-    def get(self, uri, **headers):
-        """ Make a GET request to the remote host.
+    def get(self, uri, response=None, **headers):
+        """ Make an asynchronous GET request to the remote host.
         """
-        return self.transmitter.request(b"GET", uri, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"GET", uri, **headers)
+        return response
 
-    def head(self, uri, **headers):
+    def head(self, uri, response=None, **headers):
         """ Make a HEAD request to the remote host.
         """
-        return self.transmitter.request(b"HEAD", uri, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"HEAD", uri, **headers)
+        return response
 
-    def post(self, uri, body, **headers):
+    def post(self, uri, body, response=None, **headers):
         """ Make a POST request to the remote host.
         """
-        return self.transmitter.request(b"POST", uri, body, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"POST", uri, body, **headers)
+        return response
 
-    def put(self, uri, body, **headers):
+    def put(self, uri, body, response=None, **headers):
         """ Make a PUT request to the remote host.
         """
-        return self.transmitter.request(b"PUT", uri, body, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"PUT", uri, body, **headers)
+        return response
 
-    def patch(self, uri, body, **headers):
+    def patch(self, uri, body, response=None, **headers):
         """ Make a PATCH request to the remote host.
         """
-        return self.transmitter.request(b"PATCH", uri, body, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"PATCH", uri, body, **headers)
+        return response
 
-    def delete(self, uri, **headers):
+    def delete(self, uri, response=None, **headers):
         """ Make a DELETE request to the remote host.
         """
-        return self.transmitter.request(b"DELETE", uri, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"DELETE", uri, **headers)
+        return response
 
-    def trace(self, uri, **headers):
+    def trace(self, uri, response=None, **headers):
         """ Make a TRACE request to the remote host.
         """
-        return self.transmitter.request(b"TRACE", uri, **headers)
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.request(b"TRACE", uri, **headers)
+        return response
 
     def on_data(self, data):
-        self.response.append(data)
+        self.response_handler(self.responses[0], data)
+
+    def on_status_line(self, response, data):
+        log.info("R[%d]: [HTTP] %s", self.fd, data)
+        http_version, status_code, reason_phrase = data.split(SP, 2)
+        try:
+            response.on_status_line(http_version, int(status_code), reason_phrase)
+        finally:
+            self.response_handler = self.on_headers
+
+    def on_headers(self, response, data):
+        if data:
+            log.info("R[%d]: [HTTP] %s", self.fd, data)
+            name, _, value = data.partition(b":")
+            value = value.strip()
+            try:
+                response.on_header_line(name, value)
+            finally:
+                self.response_headers[name] = value
+        else:
+            self.data_limit = int(self.response_headers["content-length"])  # TODO: substitute with content-length (or chunking)
+            self.response_handler = self.on_fixed_length_content
+
+    def on_fixed_length_content(self, response, data):
+        if len(data) > 78:
+            log.info("R[%d]: [HTTP] b*%d", self.fd, len(data))
+        else:
+            log.info("R[%d]: [HTTP] %r", self.fd, data)
+        try:
+            response.on_content(data)
+        finally:
+            self.data_limit -= len(data)
+            if self.data_limit == 0:
+                try:
+                    response.on_complete()
+                finally:
+                    response.complete = True
+                    self.responses.popleft()
+                    if self.response_headers.get("connection", "").lower() == "close":
+                        self.close()
+                    else:
+                        self.data_limit = b"\r\n"
+                        self.response_handler = self.on_status_line
+                        self.response_headers.clear()
+
+
+class HTTPResponse(object):
+
+    http_version = None
+    status_code = None
+    reason_phrase = None
+    headers = None
+    content = None
+
+    # content_type = None
+    # encoding = None
+
+    complete = False
+
+    def sync(self):
+        while not self.complete:
+            sleep(0.1)
+        return self
 
     def on_status_line(self, http_version, status_code, reason_phrase):
-        pass
+        self.http_version = http_version
+        self.status_code = status_code
+        self.reason_phrase = reason_phrase
 
-    def on_header(self, name, value):
-        pass
+    def on_header_line(self, name, value):
+        if self.headers is None:
+            self.headers = HeaderDict()
+        self.headers[name] = value
 
-    def on_body(self, data):
-        pass
+    def on_content(self, data):
+        if self.content is None:
+            self.content = bytearray()
+        self.content[len(self.content):] = data
 
-    def on_end(self):
-        pass
+    def on_complete(self):
+        try:
+            content_type, content_type_parameters = parse_header(self.headers[b"Content-Type"])
+        except KeyError:
+            pass
+        else:
+            content_type = content_type.decode("ISO-8859-1")
+            encoding = content_type_parameters.get(b"charset", b"ISO-8859-1").decode("ISO-8859-1")
+            if content_type.startswith("text/"):
+                self.content = self.content.decode(encoding)
+            elif content_type == "application/json":
+                self.content = json_loads(self.content.decode(encoding))
 
 
 def basic_auth(*args):
     return b"Basic " + b64encode(b":".join(map(bstr, args)))
 
 
-def get(uri, **headers):
-    """ Make a GET request to a URI.
-    """
-    scheme, authority, path, query, fragment = parse_uri(uri)
-    http = HTTP(authority)
-    try:
-        return http.get(uri, **headers)
-    finally:
-        http.stop_tx()
-
-
-def post(uri, body, **headers):
-    """ Make a POST request to a URI.
+def get(uri, response=None, **headers):
+    """ Make a synchronous GET request to a URI.
     """
     scheme, authority, path, query, fragment = parse_uri(uri)
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
-    http = HTTP(authority)
+    http = HTTP(authority, connection="close")
     try:
-        return http.post(ref_uri, body, connection="close", **headers)
+        return http.get(ref_uri, response, **headers).sync()
     finally:
-        http.stop_tx()
+        http.close()
+
+
+def post(uri, body, response=None, **headers):
+    """ Make a synchronous POST request to a URI.
+    """
+    scheme, authority, path, query, fragment = parse_uri(uri)
+    ref_uri = build_uri(path=path, query=query, fragment=fragment)
+    http = HTTP(authority, connection="close")
+    try:
+        return http.post(ref_uri, body, response, **headers).sync()
+    finally:
+        http.close()
+
+
+def put(uri, body, response=None, **headers):
+    """ Make a synchronous PUT request to a URI.
+    """
+    scheme, authority, path, query, fragment = parse_uri(uri)
+    ref_uri = build_uri(path=path, query=query, fragment=fragment)
+    http = HTTP(authority, connection="close")
+    try:
+        return http.put(ref_uri, body, response, **headers).sync()
+    finally:
+        http.close()
+
+
+def delete(uri, response=None, **headers):
+    """ Make a synchronous DELETE request to a URI.
+    """
+    scheme, authority, path, query, fragment = parse_uri(uri)
+    ref_uri = build_uri(path=path, query=query, fragment=fragment)
+    http = HTTP(authority, connection="close")
+    try:
+        return http.delete(ref_uri, response, **headers).sync()
+    finally:
+        http.close()

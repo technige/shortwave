@@ -118,8 +118,10 @@ class EventPollReceiver(Receiver):
                                         log.debug("R[%d]: b*%d", fd, receiving)
                                     else:
                                         log.debug("R[%d]: %s", fd, bytes(buffer[:receiving]))
-                                    transceiver.on_receive(view[:receiving])
-                                    received += receiving
+                                    try:
+                                        transceiver.on_receive(view[:receiving])
+                                    finally:
+                                        received += receiving
                         if not received:
                             transceiver.stop_rx()
                     elif event & EPOLLHUP:
@@ -166,7 +168,7 @@ class Transceiver(object):
             try:
                 self.socket.shutdown(SHUT_WR)
             except socket_error as error:
-                if error.errno not in (ENOTCONN,):
+                if error.errno not in (EBADF, ENOTCONN):
                     log.error("T[%d]: %s", self.fd, error)
             finally:
                 if self.stopped():
@@ -180,7 +182,7 @@ class Transceiver(object):
             try:
                 self.socket.shutdown(SHUT_RD)
             except socket_error as error:
-                if error.errno not in (ENOTCONN,):
+                if error.errno not in (EBADF, ENOTCONN):
                     log.error("R[%d]: %s", self.fd, error)
             finally:
                 if self.stopped():
@@ -210,7 +212,7 @@ class Connection(Transceiver):
     limiter.
     """
 
-    limit = None
+    data_limit = None
 
     def __init__(self, address, *args, **kwargs):
         super(Connection, self).__init__(address, *args, **kwargs)
@@ -220,24 +222,28 @@ class Connection(Transceiver):
         buffer = self.buffer
         buffer[len(buffer):] = view
         while buffer:
-            limit = self.limit
-            if limit is None:
-                self.on_data(buffer)
-                del buffer[:]
-            elif isinstance(limit, integer):
-                if len(buffer) < limit:
-                    break
-                self.on_data(buffer[:limit])
-                del buffer[:limit]
-            elif isinstance(limit, bytes):
-                end = buffer.find(limit)
+            data_limit = self.data_limit
+            if data_limit is None:
+                try:
+                    self.on_data(buffer)
+                finally:
+                    del buffer[:]
+            elif isinstance(data_limit, integer):
+                try:
+                    self.on_data(buffer[:data_limit])
+                finally:
+                    del buffer[:data_limit]
+            elif isinstance(data_limit, bytes):
+                end = buffer.find(data_limit)
                 if end == -1:
                     break
-                self.on_data(buffer[:end])
-                end += len(limit)
-                del buffer[:end]
+                try:
+                    self.on_data(buffer[:end])
+                finally:
+                    end += len(data_limit)
+                    del buffer[:end]
             else:
-                raise TypeError("Unsupported limiter %r" % limit)
+                raise TypeError("Unsupported limiter %r" % data_limit)
 
     def on_data(self, data):
         pass

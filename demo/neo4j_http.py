@@ -18,7 +18,7 @@
 
 from logging import DEBUG
 
-from shortwave.http import HTTP, get
+from shortwave.http import HTTP, get, post
 from shortwave.util.watcher import watch
 
 
@@ -27,7 +27,7 @@ def main():
     # http = HTTP("neo4j:neo4j@127.0.0.1:7474")
     # http.post(b"/db/data/cypher", {"query": "UNWIND range(1, 20000) AS n RETURN n"})
     # http.stop_tx()
-    get(b"http://dist.neo4j.org/neo4j-community-3.0.4-unix.tar.gz")
+    post(b"http://shortwave.tech/json?foo=bar", {"bee": "bumble"})
 
 
 if __name__ == "__main__":
