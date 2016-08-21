@@ -97,7 +97,7 @@ class EventPollReceiver(Receiver):
     def run(self):
         try:
             while self.clients:
-                events = self.poll.poll(3)
+                events = self.poll.poll(1)
                 if not self.clients:
                     break
                 for fd, event in events:
