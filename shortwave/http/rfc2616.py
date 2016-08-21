@@ -69,8 +69,12 @@ class HTTPTransmitter(Transmitter):
         super(HTTPTransmitter, self).__init__(socket)
         self.headers = HeaderDict(headers)
 
+    def transmit(self, *data):
+        log.info("T[%d]: [HTTP] %s", self.fd, b"".join(data))
+        super(HTTPTransmitter, self).transmit(*data)
+
     def request(self, method, uri, body=None, **headers):
-        transmit = super(HTTPTransmitter, self).transmit
+        transmit = self.transmit
         request_headers = self.headers.copy()
 
         if callable(body):
@@ -162,7 +166,7 @@ class HTTP(Connection):
             headers[b"Host"] = host + b":" + bstr(port)
         else:
             headers[b"Host"] = host
-        super(HTTP, self).__init__((host, port) or HTTP_PORT, headers)
+        super(HTTP, self).__init__((host, port or HTTP_PORT), headers)
         self.response = HTTPResponse(self)
 
     def options(self, uri=b"*", **headers):
@@ -233,7 +237,7 @@ def get(uri, **headers):
     try:
         return http.get(uri, **headers)
     finally:
-        http.stop()
+        http.stop_tx()
 
 
 def post(uri, body, **headers):
@@ -245,4 +249,4 @@ def post(uri, body, **headers):
     try:
         return http.post(ref_uri, body, connection="close", **headers)
     finally:
-        http.stop()
+        http.stop_tx()

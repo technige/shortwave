@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from errno import ENOTCONN, EAGAIN, EBADF
 from logging import getLogger
 from select import epoll, EPOLLET, EPOLLIN, EPOLLHUP
 from socket import socket as _socket, error as socket_error, \
@@ -33,8 +34,6 @@ class Transmitter(object):
     sent.
     """
 
-    stopped = False
-
     def __init__(self, socket, *args, **kwargs):
         self.socket = socket
         self.fd = self.socket.fileno()
@@ -44,21 +43,13 @@ class Transmitter(object):
         log.debug("T[%d]: %s", self.fd, joined)
         self.socket.sendall(joined)
 
-    def stop(self):
-        if not self.stopped:
-            log.debug("T[%d]: STOP", self.fd)
-            try:
-                self.socket.shutdown(SHUT_WR)
-            except socket_error as error:
-                log.error("T[%d]: %s", self.fd, error)
-            finally:
-                self.stopped = True
-
 
 class Receiver(Thread):
     """ An Receiver handles the incoming halves of one or more network
     conversations.
     """
+
+    running = True
 
     def __init__(self):
         super(Receiver, self).__init__()
@@ -67,11 +58,11 @@ class Receiver(Thread):
     def __len__(self):
         return len(self.clients)
 
-    def register(self, socket, on_receive, on_finish, buffer_size=8192):
-        fd = socket.fileno()
+    def attach(self, transceiver, buffer_size=8192):
+        fd = transceiver.socket.fileno()
         buffer = bytearray(buffer_size)
         view = memoryview(buffer)
-        self.clients[fd] = (socket, buffer, view, on_receive, on_finish)
+        self.clients[fd] = (transceiver, buffer, view)
 
     def run(self):
         raise NotImplementedError()
@@ -88,21 +79,23 @@ class EventPollReceiver(Receiver):
         super(EventPollReceiver, self).__init__()
         self.poll = epoll()
 
-    def register(self, socket, on_receive, on_finish, buffer_size=8192):
-        super(EventPollReceiver, self).register(socket, on_receive, on_finish, buffer_size)
-        fd = socket.fileno()
-        log.debug("R[%d]: REGISTER WITH %r", fd, self)
+    def attach(self, transceiver, buffer_size=8192):
+        fd = transceiver.socket.fileno()
+        log.debug("R[%d]: ATTACH TO %r", fd, self)
+        super(EventPollReceiver, self).attach(transceiver, buffer_size)
         self.poll.register(fd, EPOLLET | EPOLLIN)
 
+    def stopped(self):
+        return not self.running
+
     def run(self):
+        log.debug("R[*]: STARTING %r", self)
         try:
-            while self.clients:
+            while not self.stopped():
                 events = self.poll.poll(1)
-                if not self.clients:
-                    break
                 for fd, event in events:
-                    socket, buffer, view, on_receive, on_finish = self.clients[fd]
-                    recv_into = socket.recv_into
+                    transceiver, buffer, view = self.clients[fd]
+                    recv_into = transceiver.socket.recv_into
                     if event & EPOLLIN:
                         received = 0
                         receiving = -1
@@ -110,10 +103,12 @@ class EventPollReceiver(Receiver):
                             try:
                                 receiving = recv_into(buffer)
                             except socket_error as error:
-                                if error.errno == 9:
+                                if error.errno == EBADF:
+                                    # The socket has probably been disconnected in between
+                                    # the event being raised and getting here.
                                     receiving = 0
-                                elif error.errno == 11:
-                                    log.warn("R[%d]: TRY AGAIN", fd)
+                                elif error.errno == EAGAIN:
+                                    pass
                                 else:
                                     log.error("R[%d]: %s", fd, error)
                                     raise
@@ -123,23 +118,21 @@ class EventPollReceiver(Receiver):
                                         log.debug("R[%d]: b*%d", fd, receiving)
                                     else:
                                         log.debug("R[%d]: %s", fd, bytes(buffer[:receiving]))
-                                    on_receive(view[:receiving])
+                                    transceiver.on_receive(view[:receiving])
                                     received += receiving
                         if not received:
-                            log.debug("R[%d]: STOP", fd)
-                            del self.clients[fd]
-                            on_finish()
+                            transceiver.stop_rx()
                     elif event & EPOLLHUP:
-                        log.debug("R[%d]: HANG UP", fd)
-                        del self.clients[fd]
-                        on_finish()
+                        transceiver.stop_rx()
                     else:
                         raise RuntimeError(event)
         finally:
             self.poll.close()
+            log.debug("R[*]: STOPPED %r", self)
 
     def stop(self):
-        self.clients.clear()
+        log.debug("R[*]: STOPPING %r", self)
+        self.running = False
 
 
 class Transceiver(object):
@@ -155,30 +148,58 @@ class Transceiver(object):
         self.fd = self.socket.fileno()
         log.debug("X[%d]: CONNECT TO %s", self.fd, address)
         self.transmitter = self.Tx(self.socket, *args, **kwargs)
-        self.receiver = new_single_use_receiver(self)
+        self.receiver = self.Rx()
+        self.receiver.stopped = lambda: self.stopped()
+        self.receiver.attach(self)
         self.receiver.start()
-
-    def __del__(self):
-        self.close()
 
     def transmit(self, *data):
         self.transmitter.transmit(*data)
 
-    def stop(self):
-        self.transmitter.stop()
+    def stopped(self):
+        return not self.transmitter and not self.receiver
+
+    def stop_tx(self):
+        if self.transmitter:
+            log.debug("T[%d]: STOP", self.fd)
+            self.transmitter = None
+            try:
+                self.socket.shutdown(SHUT_WR)
+            except socket_error as error:
+                if error.errno not in (ENOTCONN,):
+                    log.error("T[%d]: %s", self.fd, error)
+            finally:
+                if self.stopped():
+                    self.close()
+
+    def stop_rx(self):
+        if self.receiver:
+            self.on_stop()
+            log.debug("R[%d]: STOP", self.fd)
+            self.receiver = None
+            try:
+                self.socket.shutdown(SHUT_RD)
+            except socket_error as error:
+                if error.errno not in (ENOTCONN,):
+                    log.error("R[%d]: %s", self.fd, error)
+            finally:
+                if self.stopped():
+                    self.close()
 
     def close(self):
-        log.debug("X[%d]: DISCONNECT", self.fd)
-        self.stop()
+        log.debug("X[%d]: CLOSE", self.fd)
         try:
             self.socket.close()
         except socket_error as error:
             log.error("X[%d]: %s", self.fd, error)
+        finally:
+            self.stop_tx()
+            self.stop_rx()
 
     def on_receive(self, view):
         pass
 
-    def on_finish(self):
+    def on_stop(self):
         pass
 
 
@@ -233,15 +254,11 @@ def new_socket(address):
 def new_single_use_receiver(transceiver):
     receiver = transceiver.Rx()
 
-    def on_finish():
+    def on_stop():
         try:
-            transceiver.on_finish()
-            try:
-                transceiver.socket.shutdown(SHUT_RD)
-            except socket_error:
-                pass
+            transceiver.close()
         finally:
             receiver.stop()
 
-    receiver.register(transceiver.socket, transceiver.on_receive, on_finish)
+    receiver.attach(transceiver.socket, transceiver.on_receive, on_stop)
     return receiver
