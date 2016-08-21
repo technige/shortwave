@@ -76,6 +76,9 @@ class Receiver(Thread):
     def run(self):
         raise NotImplementedError()
 
+    def stop(self):
+        raise NotImplementedError()
+
 
 class EventPollReceiver(Receiver):
     """ An implementation of Receiver that uses epoll.
@@ -134,6 +137,9 @@ class EventPollReceiver(Receiver):
                         raise RuntimeError(event)
         finally:
             self.poll.close()
+
+    def stop(self):
+        self.clients.clear()
 
 
 class Transceiver(object):
@@ -228,11 +234,14 @@ def new_single_use_receiver(transceiver):
     receiver = transceiver.Rx()
 
     def on_finish():
-        transceiver.on_finish()
         try:
-            transceiver.socket.shutdown(SHUT_RD)
-        except socket_error:
-            pass
+            transceiver.on_finish()
+            try:
+                transceiver.socket.shutdown(SHUT_RD)
+            except socket_error:
+                pass
+        finally:
+            receiver.stop()
 
     receiver.register(transceiver.socket, transceiver.on_receive, on_finish)
     return receiver
