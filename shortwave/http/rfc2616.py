@@ -249,16 +249,13 @@ class HTTP(Connection):
 
 class HTTPResponse(object):
 
-    http_version = None
-    status_code = None
-    reason_phrase = None
-    headers = None
-    content = None
-
-    # content_type = None
-    # encoding = None
-
-    complete = False
+    def __init__(self):
+        self.http_version = None
+        self.status_code = None
+        self.reason_phrase = None
+        self.headers = HeaderDict()
+        self.content = bytearray()
+        self.complete = False
 
     def sync(self):
         while not self.complete:
@@ -271,13 +268,9 @@ class HTTPResponse(object):
         self.reason_phrase = reason_phrase
 
     def on_header_line(self, name, value):
-        if self.headers is None:
-            self.headers = HeaderDict()
         self.headers[name] = value
 
     def on_content(self, data):
-        if self.content is None:
-            self.content = bytearray()
         self.content[len(self.content):] = data
 
     def on_complete(self):
