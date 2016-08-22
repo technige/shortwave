@@ -257,10 +257,21 @@ class HTTPResponse(object):
         self.content = bytearray()
         self.complete = False
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
     def sync(self):
         while not self.complete:
             sleep(0.1)
         return self
+
+    def read(self):
+        # TODO: proper reading
+        self.sync()
+        return self.content
 
     def on_status_line(self, http_version, status_code, reason_phrase):
         self.http_version = http_version

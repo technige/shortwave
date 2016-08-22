@@ -93,6 +93,8 @@ class EventPollReceiver(Receiver):
         try:
             while not self.stopped():
                 events = self.poll.poll(1)
+                if self.stopped():
+                    break
                 for fd, event in events:
                     transceiver, buffer, view = self.clients[fd]
                     recv_into = transceiver.socket.recv_into

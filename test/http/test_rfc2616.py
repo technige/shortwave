@@ -17,13 +17,20 @@
 
 from unittest import TestCase
 
-from shortwave.http import HTTP, get, post, put, delete
-
 
 class GetMethodTestCase(TestCase):
 
+    def test_response_context_manager(self):
+        from shortwave import http
+
+        with http.get("http://shortwave.tech/hello") as response:
+            assert response.status_code == 200
+            assert response.read() == "hello, world"
+
     def test_synchronous_get_function(self):
-        response = get(b"http://shortwave.tech/hello")
+        from shortwave import http
+
+        response = http.get(b"http://shortwave.tech/hello")
         assert response.http_version == b"HTTP/1.1"
         assert response.status_code == 200
         assert response.reason_phrase == b"OK"
@@ -32,6 +39,8 @@ class GetMethodTestCase(TestCase):
         assert response.complete
 
     def test_asynchronous_get_method(self):
+        from shortwave.http import HTTP
+
         http = HTTP(b"shortwave.tech")
         try:
             response = http.get(b"/hello").sync()
@@ -48,22 +57,32 @@ class GetMethodTestCase(TestCase):
 class JSONTestCase(TestCase):
 
     def test_can_get_json(self):
-        response = get(b"http://shortwave.tech/json?foo=bar")
+        from shortwave import http
+
+        response = http.get(b"http://shortwave.tech/json?foo=bar")
         assert response.content == {"method": "GET", "query": "foo=bar", "content": ""}
 
     def test_can_post_json(self):
-        response = post(b"http://shortwave.tech/json?foo=bar", b"bumblebee")
+        from shortwave import http
+
+        response = http.post(b"http://shortwave.tech/json?foo=bar", b"bumblebee")
         assert response.content == {"method": "POST", "query": "foo=bar", "content": "bumblebee"}
 
     def test_can_put_json(self):
-        response = put(b"http://shortwave.tech/json?foo=bar", b"bumblebee")
+        from shortwave import http
+
+        response = http.put(b"http://shortwave.tech/json?foo=bar", b"bumblebee")
         assert response.content == {"method": "PUT", "query": "foo=bar", "content": "bumblebee"}
 
     def test_can_delete_json(self):
-        response = delete(b"http://shortwave.tech/json?foo=bar")
+        from shortwave import http
+
+        response = http.delete(b"http://shortwave.tech/json?foo=bar")
         assert response.content == {"method": "DELETE", "query": "foo=bar", "content": ""}
 
     def test_can_post_json_in_chunks(self):
+        from shortwave.http import HTTP
+
         http = HTTP(b"shortwave.tech")
 
         def content():
@@ -79,6 +98,8 @@ class JSONTestCase(TestCase):
             http.close()
 
     def test_can_post_dict_as_json(self):
+        from shortwave.http import HTTP
+
         http = HTTP(b"shortwave.tech")
         try:
             response = http.post(b"/json?foo=bar", {"bee": "bumble"}).sync()
