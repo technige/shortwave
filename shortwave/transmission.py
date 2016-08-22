@@ -23,7 +23,7 @@ from socket import socket as _socket, error as socket_error, \
 from threading import Thread
 
 from shortwave.util.compat import integer
-
+from shortwave.util.concurrency import sync
 
 log = getLogger("shortwave")
 
@@ -161,42 +161,49 @@ class Transceiver(object):
     def stopped(self):
         return not self.transmitter and not self.receiver
 
+    @sync
     def stop_tx(self):
         if self.transmitter:
             log.debug("T[%d]: STOP", self.fd)
-            self.transmitter = None
             try:
                 self.socket.shutdown(SHUT_WR)
             except socket_error as error:
                 if error.errno not in (EBADF, ENOTCONN):
                     log.error("T[%d]: %s", self.fd, error)
             finally:
-                if self.stopped():
+                self.transmitter = None
+                if self.stopped() and not self.close.locked():
                     self.close()
 
+    @sync
     def stop_rx(self):
         if self.receiver:
-            self.on_stop()
-            log.debug("R[%d]: STOP", self.fd)
-            self.receiver = None
             try:
-                self.socket.shutdown(SHUT_RD)
-            except socket_error as error:
-                if error.errno not in (EBADF, ENOTCONN):
-                    log.error("R[%d]: %s", self.fd, error)
+                self.on_stop()
             finally:
-                if self.stopped():
-                    self.close()
+                log.debug("R[%d]: STOP", self.fd)
+                try:
+                    self.socket.shutdown(SHUT_RD)
+                except socket_error as error:
+                    if error.errno not in (EBADF, ENOTCONN):
+                        log.error("R[%d]: %s", self.fd, error)
+                finally:
+                    self.receiver = None
+                    if self.stopped() and not self.close.locked():
+                        self.close()
 
+    @sync
     def close(self):
-        log.debug("X[%d]: CLOSE", self.fd)
-        try:
-            self.socket.close()
-        except socket_error as error:
-            log.error("X[%d]: %s", self.fd, error)
-        finally:
+        if self.socket:
             self.stop_tx()
             self.stop_rx()
+            log.debug("X[%d]: CLOSE", self.fd)
+            try:
+                self.socket.close()
+            except socket_error as error:
+                log.error("X[%d]: %s", self.fd, error)
+            finally:
+                self.socket = None
 
     def on_receive(self, view):
         pass
