@@ -31,6 +31,11 @@ HTTP_VERSION = b"HTTP/1.1"
 
 log = getLogger("shortwave")
 
+connection_default = {
+    b"HTTP/1.0": b"close",
+    b"HTTP/1.1": b"keep-alive",
+}
+
 header_names.update({
     "accept": b"Accept",
     "accept_charset": b"Accept-Charset",
@@ -76,6 +81,12 @@ class HTTPTransmitter(Transmitter):
         super(HTTPTransmitter, self).transmit(*data)
 
     def request(self, method, uri, body=None, **headers):
+        if not isinstance(method, bytes):
+            method = bstr(method)
+
+        if not isinstance(uri, bytes):
+            uri = bstr(uri)
+
         transmit = self.transmit
         request_headers = self.headers.copy()
 
@@ -207,7 +218,7 @@ class HTTP(Connection):
         log.info("R[%d]: [HTTP] %s", self.fd, data)
         http_version, status_code, reason_phrase = data.split(SP, 2)
         try:
-            response.on_status_line(http_version, int(status_code), reason_phrase)
+            response.on_status_line(bytes(http_version), int(status_code), bytes(reason_phrase))
         finally:
             self.response_handler = self.on_headers
 
@@ -221,11 +232,14 @@ class HTTP(Connection):
             finally:
                 self.response_headers[name] = value
         else:
-            self.data_limit = int(self.response_headers["content-length"])  # TODO: substitute with content-length (or chunking)
-            self.response_handler = self.on_fixed_length_content
+            self.data_limit = int(self.response_headers.get("content-length", 0))  # TODO: substitute with content-length (or chunking)
+            if self.data_limit:
+                self.response_handler = self.on_fixed_length_content
+            else:
+                self.on_complete(response)
 
     def on_fixed_length_content(self, response, data):
-        if len(data) > 78:
+        if len(data) > 1024:
             log.info("R[%d]: [HTTP] b*%d", self.fd, len(data))
         else:
             log.info("R[%d]: [HTTP] %r", self.fd, data)
@@ -234,17 +248,22 @@ class HTTP(Connection):
         finally:
             self.data_limit -= len(data)
             if self.data_limit == 0:
-                try:
-                    response.on_complete()
-                finally:
-                    response.complete = True
-                    self.responses.popleft()
-                    if self.response_headers.get("connection", "").lower() == "close":
-                        self.close()
-                    else:
-                        self.data_limit = b"\r\n"
-                        self.response_handler = self.on_status_line
-                        self.response_headers.clear()
+                self.on_complete(response)
+
+    def on_complete(self, response):
+        try:
+            response.on_complete()
+        finally:
+            response.complete = True
+            self.responses.popleft()
+            headers = self.response_headers
+            connection = headers.get(b"connection", connection_default[response.http_version])
+            if connection.lower() == b"close":
+                self.close()
+            else:
+                self.data_limit = b"\r\n"
+                self.response_handler = self.on_status_line
+                headers.clear()
 
 
 class HTTPResponse(object):
@@ -254,7 +273,7 @@ class HTTPResponse(object):
         self.status_code = None
         self.reason_phrase = None
         self.headers = HeaderDict()
-        self.content = bytearray()
+        self.body = bytearray()
         self.complete = False
 
     def __enter__(self):
@@ -268,10 +287,30 @@ class HTTPResponse(object):
             sleep(0.1)
         return self
 
+    def content(self):
+        """ Return typed content (type can vary)
+        """
+        self.sync()
+        try:
+            content_type, content_type_parameters = parse_header(self.headers[b"Content-Type"])
+        except KeyError:
+            pass
+        else:
+            content_type = content_type.decode("ISO-8859-1")
+            encoding = content_type_parameters.get(b"charset", b"ISO-8859-1").decode("ISO-8859-1")
+            if content_type.startswith("text/"):
+                return self.body.decode(encoding)
+            elif content_type == "application/json":
+                return json_loads(self.body.decode(encoding))
+            else:
+                return self.body
+
     def read(self):
+        """ Returns raw content
+        """
         # TODO: proper reading
         self.sync()
-        return self.content
+        return self.body
 
     def on_status_line(self, http_version, status_code, reason_phrase):
         self.http_version = http_version
@@ -282,20 +321,10 @@ class HTTPResponse(object):
         self.headers[name] = value
 
     def on_content(self, data):
-        self.content[len(self.content):] = data
+        self.body[len(self.body):] = data
 
     def on_complete(self):
-        try:
-            content_type, content_type_parameters = parse_header(self.headers[b"Content-Type"])
-        except KeyError:
-            pass
-        else:
-            content_type = content_type.decode("ISO-8859-1")
-            encoding = content_type_parameters.get(b"charset", b"ISO-8859-1").decode("ISO-8859-1")
-            if content_type.startswith("text/"):
-                self.content = self.content.decode(encoding)
-            elif content_type == "application/json":
-                self.content = json_loads(self.content.decode(encoding))
+        pass
 
 
 def basic_auth(*args):

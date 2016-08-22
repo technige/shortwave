@@ -58,7 +58,7 @@ class Receiver(Thread):
     def __len__(self):
         return len(self.clients)
 
-    def attach(self, transceiver, buffer_size=8192):
+    def attach(self, transceiver, buffer_size=1048576):
         fd = transceiver.socket.fileno()
         buffer = bytearray(buffer_size)
         view = memoryview(buffer)
@@ -79,7 +79,7 @@ class EventPollReceiver(Receiver):
         super(EventPollReceiver, self).__init__()
         self.poll = epoll()
 
-    def attach(self, transceiver, buffer_size=8192):
+    def attach(self, transceiver, buffer_size=1048576):
         fd = transceiver.socket.fileno()
         log.debug("R[%d]: ATTACH TO %r", fd, self)
         super(EventPollReceiver, self).attach(transceiver, buffer_size)
@@ -116,7 +116,7 @@ class EventPollReceiver(Receiver):
                                     raise
                             else:
                                 if receiving:
-                                    if receiving > 78:
+                                    if receiving > 1024:
                                         log.debug("R[%d]: b*%d", fd, receiving)
                                     else:
                                         log.debug("R[%d]: %s", fd, bytes(buffer[:receiving]))
@@ -156,6 +156,9 @@ class Transceiver(object):
         self.receiver.stopped = lambda: self.stopped()
         self.receiver.attach(self)
         self.receiver.start()
+
+    def __del__(self):
+        self.close()
 
     def transmit(self, *data):
         self.transmitter.transmit(*data)
@@ -197,8 +200,10 @@ class Transceiver(object):
     @sync
     def close(self):
         if self.socket:
-            self.stop_tx()
-            self.stop_rx()
+            if not self.stop_tx.locked():
+                self.stop_tx()
+            if not self.stop_rx.locked():
+                self.stop_rx()
             log.debug("X[%d]: CLOSE", self.fd)
             try:
                 self.socket.close()

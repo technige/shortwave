@@ -18,13 +18,84 @@
 from logging import DEBUG
 from sys import argv
 
-from shortwave.http import get
+from shortwave.http import HTTP
+from shortwave.uri import parse_uri, build_uri
 from shortwave.util.watcher import watch
+
+
+def usage():
+    print("usage: shortwave.http get <uri> [<uri> ...]")
+    print("       shortwave.http post <uri> <body>")
+    print("       shortwave.http put <uri> <body>")
+    print("       shortwave.http delete <uri>")
+
+
+def get(*uris):
+    responses = []
+    try:
+        for uri in uris:
+            scheme, authority, path, query, fragment = parse_uri(uri)
+            if scheme and scheme != b"http":
+                raise ValueError("Non-HTTP URI: %r" % uri)
+            if authority:
+                http = HTTP(authority)
+            else:
+                http = responses[-1][0]
+            response = http.get(build_uri(path=path, query=query, fragment=fragment))
+            responses.append((http, response))
+    finally:
+        for _, response in responses:
+            print(response.read())
+        for http, _ in responses:
+            http.close()
+
+
+def post(uri, body):
+    scheme, authority, path, query, fragment = parse_uri(uri)
+    http = HTTP(authority, connection="close")
+    try:
+        with http.post(build_uri(path=path, query=query, fragment=fragment), body) as response:
+            data = response.read()
+            print(data)
+    finally:
+        http.close()
+
+
+def put(uri, body):
+    scheme, authority, path, query, fragment = parse_uri(uri)
+    http = HTTP(authority, connection="close")
+    try:
+        with http.put(build_uri(path=path, query=query, fragment=fragment), body) as response:
+            data = response.read()
+            print(data)
+    finally:
+        http.close()
+
+
+def delete(uri):
+    scheme, authority, path, query, fragment = parse_uri(uri)
+    http = HTTP(authority, connection="close")
+    try:
+        with http.delete(build_uri(path=path, query=query, fragment=fragment)) as response:
+            response.read()
+    finally:
+        http.close()
 
 
 def main():
     watch("shortwave", level=DEBUG)
-    get(argv[1])
+    if len(argv) == 1 or argv[1] == "help":
+        usage()
+    elif argv[1] == "get":
+        get(*argv[2:])
+    elif argv[1] == "post":
+        post(*argv[2:])
+    elif argv[1] == "put":
+        put(*argv[2:])
+    elif argv[1] == "delete":
+        delete(*argv[2:])
+    else:
+        usage()
 
 
 if __name__ == "__main__":
