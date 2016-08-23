@@ -29,7 +29,7 @@ from shortwave.util.compat import bstr
 
 HTTP_VERSION = b"HTTP/1.1"
 
-log = getLogger("shortwave")
+log = getLogger("shortwave.http")
 
 connection_default = {
     b"HTTP/1.0": b"close",
@@ -77,7 +77,7 @@ class HTTPTransmitter(Transmitter):
         self.headers = HeaderDict(headers)
 
     def transmit(self, *data):
-        log.info("T[%d]: [HTTP] %s", self.fd, b"".join(data))
+        log.info("T[%d]: %s", self.fd, b"".join(data))
         super(HTTPTransmitter, self).transmit(*data)
 
     def request(self, method, uri, body=None, **headers):
@@ -125,7 +125,7 @@ class HTTPTransmitter(Transmitter):
 class HTTP(Connection):
     Tx = HTTPTransmitter
 
-    def __init__(self, authority, **headers):
+    def __init__(self, authority, rx_buffer_size=None, **headers):
         user_info, host, port = parse_authority(authority)
         if user_info:
             headers[b"Authorization"] = basic_auth(user_info)
@@ -133,7 +133,7 @@ class HTTP(Connection):
             headers[b"Host"] = host + b":" + bstr(port)
         else:
             headers[b"Host"] = host
-        super(HTTP, self).__init__((host, port or HTTP_PORT), headers)
+        super(HTTP, self).__init__((host, port or HTTP_PORT), rx_buffer_size, headers)
         self.data_limit = b"\r\n"
         self.responses = deque()
         self.response_handler = self.on_status_line
@@ -215,7 +215,7 @@ class HTTP(Connection):
         self.response_handler(self.responses[0], data)
 
     def on_status_line(self, response, data):
-        log.info("R[%d]: [HTTP] %s", self.fd, data)
+        log.info("R[%d]: %s", self.fd, data)
         http_version, status_code, reason_phrase = data.split(SP, 2)
         try:
             response.on_status_line(bytes(http_version), int(status_code), bytes(reason_phrase))
@@ -224,7 +224,7 @@ class HTTP(Connection):
 
     def on_headers(self, response, data):
         if data:
-            log.info("R[%d]: [HTTP] %s", self.fd, data)
+            log.info("R[%d]: %s", self.fd, data)
             name, _, value = data.partition(b":")
             value = value.strip()
             try:
@@ -240,9 +240,9 @@ class HTTP(Connection):
 
     def on_fixed_length_content(self, response, data):
         if len(data) > 1024:
-            log.info("R[%d]: [HTTP] b*%d", self.fd, len(data))
+            log.info("R[%d]: b*%d", self.fd, len(data))
         else:
-            log.info("R[%d]: [HTTP] %r", self.fd, data)
+            log.info("R[%d]: %r", self.fd, data)
         try:
             response.on_content(data)
         finally:

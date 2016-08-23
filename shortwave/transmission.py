@@ -27,6 +27,8 @@ from shortwave.util.concurrency import sync
 
 log = getLogger("shortwave")
 
+default_buffer_size = 524288
+
 
 class Transmitter(object):
     """ A Transmitter handles the outgoing half of a network conversation.
@@ -55,12 +57,15 @@ class Receiver(Thread):
         super(Receiver, self).__init__()
         self.clients = {}
 
+    def __repr__(self):
+        return "<%s at 0x%x>" % (self.__class__.__name__, id(self))
+
     def __len__(self):
         return len(self.clients)
 
-    def attach(self, transceiver, buffer_size=1048576):
+    def attach(self, transceiver, buffer_size):
         fd = transceiver.socket.fileno()
-        buffer = bytearray(buffer_size)
+        buffer = bytearray(buffer_size or default_buffer_size)
         view = memoryview(buffer)
         self.clients[fd] = (transceiver, buffer, view)
 
@@ -72,24 +77,21 @@ class Receiver(Thread):
 
 
 class EventPollReceiver(Receiver):
-    """ An implementation of Receiver that uses epoll.
+    """ An Receiver implementation that uses event polling (epoll).
     """
 
     def __init__(self):
         super(EventPollReceiver, self).__init__()
         self.poll = epoll()
 
-    def attach(self, transceiver, buffer_size=1048576):
+    def attach(self, transceiver, buffer_size):
         fd = transceiver.socket.fileno()
-        log.debug("R[%d]: ATTACH TO %r", fd, self)
         super(EventPollReceiver, self).attach(transceiver, buffer_size)
         self.poll.register(fd, EPOLLET | EPOLLIN)
-
-    def stopped(self):
-        return not self.running
+        log.debug("R[%d]: ATTACHED %r (buffer_size=%d) TO %r", fd, transceiver, buffer_size, self)
 
     def run(self):
-        log.debug("R[*]: STARTING %r", self)
+        log.debug("R[*]: STARTED %r", self)
         try:
             while not self.stopped():
                 events = self.poll.poll(1)
@@ -134,9 +136,14 @@ class EventPollReceiver(Receiver):
             self.poll.close()
             log.debug("R[*]: STOPPED %r", self)
 
+    @sync
     def stop(self):
-        log.debug("R[*]: STOPPING %r", self)
-        self.running = False
+        if self.running:
+            log.debug("R[*]: STOPPING %r", self)
+            self.running = False
+
+    def stopped(self):
+        return not self.running
 
 
 class Transceiver(object):
@@ -147,14 +154,14 @@ class Transceiver(object):
     Tx = Transmitter
     Rx = EventPollReceiver  # TODO: adjust based on platform capabilities
 
-    def __init__(self, address, *args, **kwargs):
+    def __init__(self, address, rx_buffer_size=None, *args, **kwargs):
         self.socket = new_socket(address)
         self.fd = self.socket.fileno()
         log.debug("X[%d]: CONNECT TO %s", self.fd, address)
         self.transmitter = self.Tx(self.socket, *args, **kwargs)
         self.receiver = self.Rx()
         self.receiver.stopped = lambda: self.stopped()
-        self.receiver.attach(self)
+        self.receiver.attach(self, rx_buffer_size)
         self.receiver.start()
 
     def __del__(self):
@@ -228,8 +235,8 @@ class Connection(Transceiver):
 
     data_limit = None
 
-    def __init__(self, address, *args, **kwargs):
-        super(Connection, self).__init__(address, *args, **kwargs)
+    def __init__(self, address, rx_buffer_size=None, *args, **kwargs):
+        super(Connection, self).__init__(address, rx_buffer_size, *args, **kwargs)
         self.buffer = bytearray()
 
     def on_receive(self, view):
@@ -269,16 +276,3 @@ def new_socket(address):
     socket.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
     socket.setblocking(0)
     return socket
-
-
-def new_single_use_receiver(transceiver):
-    receiver = transceiver.Rx()
-
-    def on_stop():
-        try:
-            transceiver.close()
-        finally:
-            receiver.stop()
-
-    receiver.attach(transceiver.socket, transceiver.on_receive, on_stop)
-    return receiver

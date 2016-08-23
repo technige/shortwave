@@ -111,23 +111,24 @@ class Watcher(object):
 
     handlers = {}
 
-    def __init__(self, logger_name):
+    def __init__(self, *logger_names):
         super(Watcher, self).__init__()
-        self.logger_name = logger_name
-        self.logger = getLogger(self.logger_name)
+        self.loggers = [getLogger(name) for name in logger_names]
         self.formatter = ColourFormatter("%(asctime)s  %(message)s")
 
     def watch(self, level=INFO, out=stdout):
         self.stop()
         handler = StreamHandler(out)
         handler.setFormatter(self.formatter)
-        self.handlers[self.logger_name] = handler
-        self.logger.addHandler(handler)
-        self.logger.setLevel(level)
+        for logger in self.loggers:
+            self.handlers[logger.name] = handler
+            logger.addHandler(handler)
+            logger.setLevel(level)
 
     def stop(self):
         try:
-            self.logger.removeHandler(self.handlers[self.logger_name])
+            for logger in self.loggers:
+                logger.removeHandler(self.handlers[logger.name])
         except KeyError:
             pass
 
