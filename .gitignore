@@ -24,6 +24,7 @@ MANIFEST
 pip-log.txt
 
 # Unit test / coverage reports
+htmlcov
 .coverage
 nosetests.xml
 

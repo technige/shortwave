@@ -125,7 +125,7 @@ class HTTPTransmitter(Transmitter):
 class HTTP(Connection):
     Tx = HTTPTransmitter
 
-    def __init__(self, authority, rx_buffer_size=None, **headers):
+    def __init__(self, authority, receiver=None, rx_buffer_size=None, **headers):
         user_info, host, port = parse_authority(authority)
         if user_info:
             headers[b"Authorization"] = basic_auth(user_info)
@@ -133,7 +133,7 @@ class HTTP(Connection):
             headers[b"Host"] = host + b":" + bstr(port)
         else:
             headers[b"Host"] = host
-        super(HTTP, self).__init__((host, port or HTTP_PORT), rx_buffer_size, headers)
+        super(HTTP, self).__init__((host, port or HTTP_PORT), receiver, rx_buffer_size, headers)
         self.data_limit = b"\r\n"
         self.responses = deque()
         self.response_handler = self.on_status_line

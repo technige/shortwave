@@ -60,9 +60,6 @@ class Receiver(Thread):
     def __repr__(self):
         return "<%s at 0x%x>" % (self.__class__.__name__, id(self))
 
-    def __len__(self):
-        return len(self.clients)
-
     def attach(self, transceiver, buffer_size):
         fd = transceiver.socket.fileno()
         buffer = bytearray(buffer_size or default_buffer_size)
@@ -70,10 +67,10 @@ class Receiver(Thread):
         self.clients[fd] = (transceiver, buffer, view)
 
     def run(self):
-        raise NotImplementedError()
+        pass
 
     def stop(self):
-        raise NotImplementedError()
+        pass
 
 
 class EventPollReceiver(Receiver):
@@ -154,15 +151,21 @@ class Transceiver(object):
     Tx = Transmitter
     Rx = EventPollReceiver  # TODO: adjust based on platform capabilities
 
-    def __init__(self, address, rx_buffer_size=None, *args, **kwargs):
+    transmitter = None
+    receiver = None
+
+    def __init__(self, address, receiver=None, rx_buffer_size=None, *args, **kwargs):
         self.socket = new_socket(address)
         self.fd = self.socket.fileno()
         log.debug("X[%d]: CONNECT TO %s", self.fd, address)
         self.transmitter = self.Tx(self.socket, *args, **kwargs)
-        self.receiver = self.Rx()
-        self.receiver.stopped = lambda: self.stopped()
+        if receiver:
+            self.receiver = receiver
+        else:
+            self.receiver = self.Rx()
+            self.receiver.stopped = lambda: self.stopped()
+            self.receiver.start()
         self.receiver.attach(self, rx_buffer_size)
-        self.receiver.start()
 
     def __del__(self):
         self.close()
@@ -235,8 +238,8 @@ class Connection(Transceiver):
 
     data_limit = None
 
-    def __init__(self, address, rx_buffer_size=None, *args, **kwargs):
-        super(Connection, self).__init__(address, rx_buffer_size, *args, **kwargs)
+    def __init__(self, address, receiver=None, rx_buffer_size=None, *args, **kwargs):
+        super(Connection, self).__init__(address, receiver, rx_buffer_size, *args, **kwargs)
         self.buffer = bytearray()
 
     def on_receive(self, view):

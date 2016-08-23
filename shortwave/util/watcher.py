@@ -20,7 +20,7 @@
 
 
 from logging import CRITICAL, DEBUG, ERROR, INFO, WARNING, Formatter, StreamHandler, getLogger
-from sys import stdout
+from sys import stderr
 
 
 def black(s):
@@ -116,7 +116,7 @@ class Watcher(object):
         self.loggers = [getLogger(name) for name in logger_names]
         self.formatter = ColourFormatter("%(asctime)s  %(message)s")
 
-    def watch(self, level=INFO, out=stdout):
+    def watch(self, level=INFO, out=stderr):
         self.stop()
         handler = StreamHandler(out)
         handler.setFormatter(self.formatter)
@@ -133,12 +133,12 @@ class Watcher(object):
             pass
 
 
-def watch(logger_name, level=INFO, out=stdout):
+def watch(logger_name, level=INFO, out=stderr):
     """ Quick wrapper for using the Watcher.
 
     :param logger_name: name of logger to watch
-    :param level: minimum log level to show (default INFO)
-    :param out: where to send output (default stdout)
+    :param level: minimum log level to show
+    :param out: where to send output
     :return: Watcher instance
     """
     watcher = Watcher(logger_name)
