@@ -40,9 +40,9 @@ def get(prog, method, *args):
     parser.add_argument("uri", nargs="+")
     parsed = parser.parse_args(args)
     if parsed.verbose:
-        watch("shortwave", level=INFO)
+        watch("shortwave.http", level=INFO)
     if parsed.very_verbose:
-        watch("shortwave", level=DEBUG)
+        watch("shortwave.transmission", level=DEBUG)
     if parsed.single_receiver:
         receiver = HTTP.Rx()
         receiver.start()
@@ -80,9 +80,9 @@ def post(prog, method, *args):
     parser.add_argument("body")
     parsed = parser.parse_args(args)
     if parsed.verbose:
-        watch("shortwave", level=INFO)
+        watch("shortwave.http", level=INFO)
     if parsed.very_verbose:
-        watch("shortwave", level=DEBUG)
+        watch("shortwave.transmission", level=DEBUG)
     scheme, authority, path, query, fragment = parse_uri(parsed.uri)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
@@ -103,9 +103,9 @@ def put(prog, method, *args):
     parser.add_argument("body")
     parsed = parser.parse_args(args)
     if parsed.verbose:
-        watch("shortwave", level=INFO)
+        watch("shortwave.http", level=INFO)
     if parsed.very_verbose:
-        watch("shortwave", level=DEBUG)
+        watch("shortwave.transmission", level=DEBUG)
     scheme, authority, path, query, fragment = parse_uri(parsed.uri)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
@@ -125,9 +125,9 @@ def delete(prog, method, *args):
     parser.add_argument("uri")
     parsed = parser.parse_args(args)
     if parsed.verbose:
-        watch("shortwave", level=INFO)
+        watch("shortwave.http", level=INFO)
     if parsed.very_verbose:
-        watch("shortwave", level=DEBUG)
+        watch("shortwave.transmission", level=DEBUG)
     scheme, authority, path, query, fragment = parse_uri(parsed.uri)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)

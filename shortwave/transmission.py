@@ -25,7 +25,7 @@ from threading import Thread
 from shortwave.util.compat import integer
 from shortwave.util.concurrency import sync
 
-log = getLogger("shortwave")
+log = getLogger("shortwave.transmission")
 
 default_buffer_size = 524288
 
@@ -42,7 +42,7 @@ class Transmitter(object):
 
     def transmit(self, *data):
         joined = b"".join(data)
-        log.debug("T[%d]: %s", self.fd, joined)
+        log.info("T[%d]: %s", self.fd, joined)
         self.socket.sendall(joined)
 
 
@@ -85,10 +85,10 @@ class EventPollReceiver(Receiver):
         fd = transceiver.socket.fileno()
         super(EventPollReceiver, self).attach(transceiver, buffer_size)
         self.poll.register(fd, EPOLLET | EPOLLIN)
-        log.debug("R[%d]: ATTACHED %r (buffer_size=%d) TO %r", fd, transceiver, buffer_size, self)
+        log.debug("Attached %r (buffer_size=%d) to %r", transceiver, buffer_size, self)
 
     def run(self):
-        log.debug("R[*]: STARTED %r", self)
+        log.debug("Started %r", self)
         try:
             while not self.stopped():
                 events = self.poll.poll(0.1)
@@ -98,7 +98,7 @@ class EventPollReceiver(Receiver):
                     self._handle_event(fd, event)
         finally:
             self.poll.close()
-            log.debug("R[*]: STOPPED %r", self)
+            log.debug("Stopped %r", self)
 
     def _handle_event(self, fd, event):
         transceiver, buffer, view = self.clients[fd]
@@ -123,9 +123,9 @@ class EventPollReceiver(Receiver):
                 else:
                     if receiving:
                         if receiving > 1024:
-                            log.debug("R[%d]: b*%d", fd, receiving)
+                            log.info("R[%d]: b*%d", fd, receiving)
                         else:
-                            log.debug("R[%d]: %s", fd, bytes(buffer[:receiving]))
+                            log.info("R[%d]: %s", fd, bytes(buffer[:receiving]))
                         try:
                             transceiver.on_receive(view[:receiving])
                         finally:
@@ -141,7 +141,7 @@ class EventPollReceiver(Receiver):
     @sync
     def stop(self):
         if self.running:
-            log.debug("R[*]: STOPPING %r", self)
+            log.debug("Stopping %r", self)
             self.running = False
 
     def stopped(self):
@@ -162,7 +162,7 @@ class Transceiver(object):
     def __init__(self, address, receiver=None, rx_buffer_size=None, *args, **kwargs):
         self.socket = new_socket(address)
         self.fd = self.socket.fileno()
-        log.debug("X[%d]: CONNECT TO %s", self.fd, address)
+        log.info("X[%d]: Connected to %s", self.fd, address)
         self.transmitter = self.Tx(self.socket, *args, **kwargs)
         if receiver:
             self.receiver = receiver
@@ -175,6 +175,9 @@ class Transceiver(object):
     def __del__(self):
         self.close()
 
+    def __repr__(self):
+        return "<%s #%d>" % (self.__class__.__name__, self.fd)
+
     def transmit(self, *data):
         self.transmitter.transmit(*data)
 
@@ -184,7 +187,7 @@ class Transceiver(object):
     @sync
     def stop_tx(self):
         if self.transmitter:
-            log.debug("T[%d]: STOP", self.fd)
+            log.info("T[%d]: STOP", self.fd)
             try:
                 self.socket.shutdown(SHUT_WR)
             except socket_error as error:
@@ -201,7 +204,7 @@ class Transceiver(object):
             try:
                 self.on_stop()
             finally:
-                log.debug("R[%d]: STOP", self.fd)
+                log.info("R[%d]: STOP", self.fd)
                 try:
                     self.socket.shutdown(SHUT_RD)
                 except socket_error as error:
@@ -219,13 +222,13 @@ class Transceiver(object):
                 self.stop_tx()
             if not self.stop_rx.locked():
                 self.stop_rx()
-            log.debug("X[%d]: CLOSE", self.fd)
             try:
                 self.socket.close()
             except socket_error as error:
-                log.error("X[%d]: %s", self.fd, error)
+                pass
             finally:
                 self.socket = None
+                log.info("X[%d]: Closed", self.fd)
 
     def on_receive(self, view):
         pass

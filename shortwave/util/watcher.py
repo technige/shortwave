@@ -114,7 +114,7 @@ class Watcher(object):
     def __init__(self, *logger_names):
         super(Watcher, self).__init__()
         self.loggers = [getLogger(name) for name in logger_names]
-        self.formatter = ColourFormatter("%(asctime)s  %(message)s")
+        self.formatter = ColourFormatter("%(asctime)s.%(msecs)03d  %(message)s", datefmt="%a %H:%M:%S")
 
     def watch(self, level=INFO, out=stderr):
         self.stop()

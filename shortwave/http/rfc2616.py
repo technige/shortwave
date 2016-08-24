@@ -26,7 +26,6 @@ from shortwave.messaging import SP, CR_LF, HeaderDict, header_names, parse_heade
 from shortwave.numbers import HTTP_PORT
 from shortwave.uri import parse_authority, parse_uri, build_uri
 from shortwave.util.compat import bstr
-from shortwave.util.concurrency import sync
 
 HTTP_VERSION = b"HTTP/1.1"
 
@@ -78,7 +77,9 @@ class HTTPTransmitter(Transmitter):
         self.headers = HeaderDict(headers)
 
     def transmit(self, *data):
-        log.info("T[%d]: %s", self.fd, b"".join(data))
+        log_data = b"".join(data).decode()
+        for line in log_data.splitlines():
+            log.info("T[%d]: %s", self.fd, line)
         super(HTTPTransmitter, self).transmit(*data)
 
     def request(self, method, uri, body=None, **headers):
@@ -216,7 +217,7 @@ class HTTP(Connection):
         self.response_handler(self.responses[0], data)
 
     def on_status_line(self, response, data):
-        log.info("R[%d]: %s", self.fd, data)
+        log.info("R[%d]: %s", self.fd, data.decode())
         http_version, status_code, reason_phrase = data.split(SP, 2)
         try:
             response.on_status_line(bytes(http_version), int(status_code), bytes(reason_phrase))
@@ -224,8 +225,8 @@ class HTTP(Connection):
             self.response_handler = self.on_headers
 
     def on_headers(self, response, data):
+        log.info("R[%d]: %s", self.fd, data.decode())
         if data:
-            log.info("R[%d]: %s", self.fd, data)
             name, _, value = data.partition(b":")
             value = value.strip()
             try:
@@ -241,9 +242,9 @@ class HTTP(Connection):
 
     def on_fixed_length_content(self, response, data):
         if len(data) > 1024:
-            log.info("R[%d]: b*%d", self.fd, len(data))
+            log.info("R[%d]: %d bytes", self.fd, len(data))
         else:
-            log.info("R[%d]: %r", self.fd, data)
+            log.info("R[%d]: %r", self.fd, bytes(data))
         try:
             response.on_content(data)
         finally:
@@ -255,7 +256,7 @@ class HTTP(Connection):
         try:
             response.on_complete()
         finally:
-            log.debug("Marking %r as complete", response)
+            # log.debug("Marking %r as complete", response)
             response.complete.set()
             self.responses.popleft()
             headers = self.response_headers
@@ -288,7 +289,7 @@ class HTTPResponse(object):
         pass
 
     def sync(self, timeout=None):
-        log.debug("Waiting for %r to complete", self)
+        # log.debug("Waiting for %r to complete", self)
         if self.complete.wait(timeout):
             return self
         else:
