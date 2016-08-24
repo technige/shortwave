@@ -91,47 +91,52 @@ class EventPollReceiver(Receiver):
         log.debug("R[*]: STARTED %r", self)
         try:
             while not self.stopped():
-                events = self.poll.poll(1)
+                events = self.poll.poll(0.1)
                 if self.stopped():
                     break
                 for fd, event in events:
-                    transceiver, buffer, view = self.clients[fd]
-                    recv_into = transceiver.socket.recv_into
-                    if event & EPOLLIN:
-                        received = 0
-                        receiving = -1
-                        while receiving:
-                            try:
-                                receiving = recv_into(buffer)
-                            except socket_error as error:
-                                if error.errno == EBADF:
-                                    # The socket has probably been disconnected in between
-                                    # the event being raised and getting here.
-                                    receiving = 0
-                                elif error.errno == EAGAIN:
-                                    pass
-                                else:
-                                    log.error("R[%d]: %s", fd, error)
-                                    raise
-                            else:
-                                if receiving:
-                                    if receiving > 1024:
-                                        log.debug("R[%d]: b*%d", fd, receiving)
-                                    else:
-                                        log.debug("R[%d]: %s", fd, bytes(buffer[:receiving]))
-                                    try:
-                                        transceiver.on_receive(view[:receiving])
-                                    finally:
-                                        received += receiving
-                        if not received:
-                            transceiver.stop_rx()
-                    elif event & EPOLLHUP:
-                        transceiver.stop_rx()
-                    else:
-                        raise RuntimeError(event)
+                    self._handle_event(fd, event)
         finally:
             self.poll.close()
             log.debug("R[*]: STOPPED %r", self)
+
+    def _handle_event(self, fd, event):
+        transceiver, buffer, view = self.clients[fd]
+        if event & EPOLLIN:
+            received = 0
+            receiving = -1
+            while receiving:
+                try:
+                    receiving = transceiver.socket.recv_into(buffer)
+                except AttributeError:
+                    # The socket has probably been closed
+                    receiving = 0
+                except socket_error as error:
+                    if error.errno in (EAGAIN, EBADF):
+                        # EBADF: The socket has probably been disconnected in between
+                        # the event being raised and getting here.
+                        # EAGAIN: We've simply run out of data to read
+                        receiving = 0
+                    else:
+                        log.error("R[%d]: %s", fd, error)
+                        raise
+                else:
+                    if receiving:
+                        if receiving > 1024:
+                            log.debug("R[%d]: b*%d", fd, receiving)
+                        else:
+                            log.debug("R[%d]: %s", fd, bytes(buffer[:receiving]))
+                        try:
+                            transceiver.on_receive(view[:receiving])
+                        finally:
+                            received += receiving
+            if not received:
+                transceiver.stop_rx()
+        elif event & EPOLLHUP:
+            transceiver.stop_rx()
+        else:
+            log.error("R[%d]: Unknown event %r", fd, event)
+            raise RuntimeError(event)
 
     @sync
     def stop(self):

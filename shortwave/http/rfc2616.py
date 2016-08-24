@@ -19,13 +19,14 @@ from base64 import b64encode
 from collections import deque
 from json import dumps as json_dumps, loads as json_loads
 from logging import getLogger
-from time import sleep
+from threading import Event
 
 from shortwave import Connection, Transmitter
 from shortwave.messaging import SP, CR_LF, HeaderDict, header_names, parse_header
 from shortwave.numbers import HTTP_PORT
 from shortwave.uri import parse_authority, parse_uri, build_uri
 from shortwave.util.compat import bstr
+from shortwave.util.concurrency import sync
 
 HTTP_VERSION = b"HTTP/1.1"
 
@@ -254,7 +255,8 @@ class HTTP(Connection):
         try:
             response.on_complete()
         finally:
-            response.complete = True
+            log.debug("Marking %r as complete", response)
+            response.complete.set()
             self.responses.popleft()
             headers = self.response_headers
             connection = headers.get(b"connection", connection_default[response.http_version])
@@ -274,7 +276,10 @@ class HTTPResponse(object):
         self.reason_phrase = None
         self.headers = HeaderDict()
         self.body = bytearray()
-        self.complete = False
+        self.complete = Event()
+
+    def __repr__(self):
+        return "<%s at 0x%x>" % (self.__class__.__name__, id(self))
 
     def __enter__(self):
         return self
@@ -282,10 +287,12 @@ class HTTPResponse(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def sync(self):
-        while not self.complete:
-            sleep(0.1)
-        return self
+    def sync(self, timeout=None):
+        log.debug("Waiting for %r to complete", self)
+        if self.complete.wait(timeout):
+            return self
+        else:
+            return None
 
     def content(self):
         """ Return typed content (type can vary)
