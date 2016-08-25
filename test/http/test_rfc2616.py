@@ -23,7 +23,7 @@ class GetMethodTestCase(TestCase):
     def test_response_context_manager(self):
         from shortwave import http
 
-        with http.get("http://shortwave.tech/hello") as response:
+        with http.get(b"http://shortwave.tech/hello") as response:
             assert response.status_code == 200
             assert response.read() == b"hello, world\r\n"
 

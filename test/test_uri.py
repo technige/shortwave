@@ -121,7 +121,7 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_empty_string_uri(self):
-        scheme, authority, path, query, fragment = parse_uri("")
+        scheme, authority, path, query, fragment = parse_uri(b"")
         assert scheme is None
         assert authority is None
         assert path == b""
@@ -129,7 +129,7 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_absolute_path_uri(self):
-        scheme, authority, path, query, fragment = parse_uri("/foo/bar")
+        scheme, authority, path, query, fragment = parse_uri(b"/foo/bar")
         assert scheme is None
         assert authority is None
         assert path == b"/foo/bar"
@@ -137,7 +137,7 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_relative_path_uri(self):
-        scheme, authority, path, query, fragment = parse_uri("foo/bar")
+        scheme, authority, path, query, fragment = parse_uri(b"foo/bar")
         assert scheme is None
         assert authority is None
         assert path == b"foo/bar"
@@ -145,7 +145,7 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_only_query(self):
-        scheme, authority, path, query, fragment = parse_uri("?foo=bar")
+        scheme, authority, path, query, fragment = parse_uri(b"?foo=bar")
         assert scheme is None
         assert authority is None
         assert path == b""
@@ -153,7 +153,7 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_only_fragment(self):
-        scheme, authority, path, query, fragment = parse_uri("#foo")
+        scheme, authority, path, query, fragment = parse_uri(b"#foo")
         assert scheme is None
         assert authority is None
         assert path == b""
@@ -161,7 +161,7 @@ class ParseURITestCase(TestCase):
         assert fragment == b"foo"
 
     def test_can_parse_uri_without_scheme(self):
-        scheme, authority, path, query, fragment = parse_uri("//example.com")
+        scheme, authority, path, query, fragment = parse_uri(b"//example.com")
         assert scheme is None
         assert authority == b"example.com"
         assert path == b""
@@ -169,7 +169,7 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_uri_without_scheme_but_with_port(self):
-        scheme, authority, path, query, fragment = parse_uri("//example.com:8080")
+        scheme, authority, path, query, fragment = parse_uri(b"//example.com:8080")
         assert scheme is None
         assert authority == b"example.com:8080"
         assert path == b""
@@ -177,23 +177,15 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_simple_uri(self):
-        scheme, authority, path, query, fragment = parse_uri("foo://example.com")
+        scheme, authority, path, query, fragment = parse_uri(b"foo://example.com")
         assert scheme == b"foo"
         assert authority == b"example.com"
         assert path == b""
         assert query is None
         assert fragment is None
 
-    def test_can_parse_uri_with_extended_chars(self):
-        scheme, authority, path, query, fragment = parse_uri("foo://éxamplə.çôm/foo")
-        assert scheme == b"foo"
-        assert authority == "éxamplə.çôm".encode("utf-8")
-        assert path == b"/foo"
-        assert query is None
-        assert fragment is None
-
     def test_can_parse_uri_with_root_path(self):
-        scheme, authority, path, query, fragment = parse_uri("foo://example.com/")
+        scheme, authority, path, query, fragment = parse_uri(b"foo://example.com/")
         assert scheme == b"foo"
         assert authority == b"example.com"
         assert path == b"/"
@@ -201,8 +193,8 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_full_uri(self):
-        scheme, authority, path, query, fragment = parse_uri("foo://bob@somewhere@example.com:8042"
-                                                             "/over/there?name=ferret#nose")
+        scheme, authority, path, query, fragment = parse_uri(b"foo://bob@somewhere@example.com:8042"
+                                                             b"/over/there?name=ferret#nose")
         assert scheme == b"foo"
         assert authority == b"bob@somewhere@example.com:8042"
         assert path == b"/over/there"
@@ -219,65 +211,66 @@ class BuildURITestCase(TestCase):
         assert built is b""
 
     def test_can_build_uri_from_string(self):
-        built = build_uri(uri="foo://example.com/")
+        built = build_uri(uri=b"foo://example.com/")
         assert built == b"foo://example.com/"
 
     def test_can_build_uri_from_hierarchical_part(self):
-        built = build_uri(hierarchical_part="//example.com/")
+        built = build_uri(hierarchical_part=b"//example.com/")
         assert built == b"//example.com/"
 
     def test_can_build_uri_from_scheme_and_hierarchical_part(self):
-        built = build_uri(scheme="foo", hierarchical_part="//example.com/")
+        built = build_uri(scheme=b"foo", hierarchical_part=b"//example.com/")
         assert built == b"foo://example.com/"
 
     def test_can_build_uri_from_scheme_hierarchical_part_and_query(self):
-        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs")
+        built = build_uri(scheme=b"foo", hierarchical_part=b"//example.com/", query=b"spam=eggs")
         assert built == b"foo://example.com/?spam=eggs"
 
     def test_can_build_uri_from_scheme_hierarchical_part_query_and_fragment(self):
-        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs",
-                          fragment="mustard")
+        built = build_uri(scheme=b"foo", hierarchical_part=b"//example.com/", query=b"spam=eggs",
+                          fragment=b"mustard")
         assert built == b"foo://example.com/?spam=eggs#mustard"
 
     def test_can_build_uri_from_absolute_path_reference(self):
-        built = build_uri(absolute_path_reference="/foo/bar?spam=eggs#mustard")
+        built = build_uri(absolute_path_reference=b"/foo/bar?spam=eggs#mustard")
         assert built == b"/foo/bar?spam=eggs#mustard"
 
     def test_can_build_uri_from_authority_and_absolute_path_reference(self):
-        built = build_uri(authority="bob@example.com:9999",
-                          absolute_path_reference="/foo/bar?spam=eggs#mustard")
+        built = build_uri(authority=b"bob@example.com:9999",
+                          absolute_path_reference=b"/foo/bar?spam=eggs#mustard")
         assert built == b"//bob@example.com:9999/foo/bar?spam=eggs#mustard"
 
     def test_can_build_uri_from_scheme_host_and_path(self):
-        built = build_uri(scheme="http", host="example.com", path="/foo/bar")
+        built = build_uri(scheme=b"http", host=b"example.com", path=b"/foo/bar")
         assert built == b"http://example.com/foo/bar"
 
     def test_can_build_uri_from_scheme_and_host_port(self):
-        built = build_uri(scheme="http", host_port="example.com:3456")
+        built = build_uri(scheme=b"http", host_port=b"example.com:3456")
         assert built == b"http://example.com:3456"
 
     def test_can_build_uri_from_scheme_authority_and_host_port(self):
-        built = build_uri(scheme="http", authority="bob@example.net:4567", host_port="example.com:3456")
+        built = build_uri(scheme=b"http", authority=b"bob@example.net:4567",
+                          host_port=b"example.com:3456")
         assert built == b"http://bob@example.com:3456"
 
     def test_can_build_uri_from_scheme_user_info_and_host_port(self):
-        built = build_uri(scheme="http", user_info="bob", host_port="example.com:3456")
+        built = build_uri(scheme=b"http", user_info=b"bob", host_port=b"example.com:3456")
         assert built == b"http://bob@example.com:3456"
 
     def test_can_build_uri_from_scheme_user_info_and_path(self):
-        built = build_uri(scheme="http", user_info="bob", path="/foo")
+        built = build_uri(scheme=b"http", user_info=b"bob", path=b"/foo")
         assert built == b"http://bob@/foo"
 
     def test_can_build_uri_from_scheme_authority_and_host(self):
-        built = build_uri(scheme="http", authority="bob@example.net", host="example.com")
+        built = build_uri(scheme=b"http", authority=b"bob@example.net", host=b"example.com")
         assert built == b"http://bob@example.com"
 
     def test_can_build_uri_from_scheme_authority_and_port(self):
-        built = build_uri(scheme="http", authority="bob@example.com", port=3456)
+        built = build_uri(scheme=b"http", authority=b"bob@example.com", port=3456)
         assert built == b"http://bob@example.com:3456"
 
     def test_can_build_uri_from_scheme_port_and_path(self):
-        built = build_uri(scheme="http", port=3456, path="/foo")
+        built = build_uri(scheme=b"http", port=3456, path=b"/foo")
         assert built == b"http://:3456/foo"
 
 
@@ -285,7 +278,7 @@ class ResolveURITestCase(TestCase):
     """ RFC 3986, section 5.4.
     """
 
-    base_uri = "http://a/b/c/d;p?q"
+    base_uri = b"http://a/b/c/d;p?q"
 
     def resolve_references(self, references, strict=True):
         for reference, target in references.items():
@@ -298,29 +291,29 @@ class ResolveURITestCase(TestCase):
         """
 
         self.resolve_references({
-            "g:h": b"g:h",
-            "g": b"http://a/b/c/g",
-            "./g": b"http://a/b/c/g",
-            "g/": b"http://a/b/c/g/",
-            "/g": b"http://a/g",
-            "//g": b"http://g",
-            "?y": b"http://a/b/c/d;p?y",
-            "g?y": b"http://a/b/c/g?y",
-            "#s": b"http://a/b/c/d;p?q#s",
-            "g#s": b"http://a/b/c/g#s",
-            "g?y#s": b"http://a/b/c/g?y#s",
-            ";x": b"http://a/b/c/;x",
-            "g;x": b"http://a/b/c/g;x",
-            "g;x?y#s": b"http://a/b/c/g;x?y#s",
-            "": b"http://a/b/c/d;p?q",
-            ".": b"http://a/b/c/",
-            "./": b"http://a/b/c/",
-            "..": b"http://a/b/",
-            "../": b"http://a/b/",
-            "../g": b"http://a/b/g",
-            "../..": b"http://a/",
-            "../../": b"http://a/",
-            "../../g": b"http://a/g",
+            b"g:h": b"g:h",
+            b"g": b"http://a/b/c/g",
+            b"./g": b"http://a/b/c/g",
+            b"g/": b"http://a/b/c/g/",
+            b"/g": b"http://a/g",
+            b"//g": b"http://g",
+            b"?y": b"http://a/b/c/d;p?y",
+            b"g?y": b"http://a/b/c/g?y",
+            b"#s": b"http://a/b/c/d;p?q#s",
+            b"g#s": b"http://a/b/c/g#s",
+            b"g?y#s": b"http://a/b/c/g?y#s",
+            b";x": b"http://a/b/c/;x",
+            b"g;x": b"http://a/b/c/g;x",
+            b"g;x?y#s": b"http://a/b/c/g;x?y#s",
+            b"": b"http://a/b/c/d;p?q",
+            b".": b"http://a/b/c/",
+            b"./": b"http://a/b/c/",
+            b"..": b"http://a/b/",
+            b"../": b"http://a/b/",
+            b"../g": b"http://a/b/g",
+            b"../..": b"http://a/",
+            b"../../": b"http://a/",
+            b"../../g": b"http://a/g",
         })
 
     def test_abnormal_examples(self):
@@ -336,31 +329,31 @@ class ResolveURITestCase(TestCase):
         # levels in the base URI's path.  Note that the ".." syntax cannot be
         # used to change the authority component of a URI.
         self.resolve_references({
-            "../../../g": b"http://a/g",
-            "../../../../g": b"http://a/g",
+            b"../../../g": b"http://a/g",
+            b"../../../../g": b"http://a/g",
         })
 
         # Similarly, parsers must remove the dot-segments "." and ".." when
         # they are complete components of a path, but not when they are only
         # part of a segment.
         self.resolve_references({
-            "/./g": b"http://a/g",
-            "/../g": b"http://a/g",
-            "g.": b"http://a/b/c/g.",
-            ".g": b"http://a/b/c/.g",
-            "g..": b"http://a/b/c/g..",
-            "..g": b"http://a/b/c/..g",
+            b"/./g": b"http://a/g",
+            b"/../g": b"http://a/g",
+            b"g.": b"http://a/b/c/g.",
+            b".g": b"http://a/b/c/.g",
+            b"g..": b"http://a/b/c/g..",
+            b"..g": b"http://a/b/c/..g",
         })
 
         # Less likely are cases where the relative reference uses unnecessary
         # or nonsensical forms of the "." and ".." complete path segments.
         self.resolve_references({
-            "./../g": b"http://a/b/g",
-            "./g/.": b"http://a/b/c/g/",
-            "g/./h": b"http://a/b/c/g/h",
-            "g/../h": b"http://a/b/c/h",
-            "g;x=1/./y": b"http://a/b/c/g;x=1/y",
-            "g;x=1/../y": b"http://a/b/c/y",
+            b"./../g": b"http://a/b/g",
+            b"./g/.": b"http://a/b/c/g/",
+            b"g/./h": b"http://a/b/c/g/h",
+            b"g/../h": b"http://a/b/c/h",
+            b"g;x=1/./y": b"http://a/b/c/g;x=1/y",
+            b"g;x=1/../y": b"http://a/b/c/y",
         })
 
         # Some applications fail to separate the reference's query and/or
@@ -370,10 +363,10 @@ class ResolveURITestCase(TestCase):
         # ("/") character and the query component is not normally used within
         # relative references.
         self.resolve_references({
-            "g?y/./x": b"http://a/b/c/g?y/./x",
-            "g?y/../x": b"http://a/b/c/g?y/../x",
-            "g#s/./x": b"http://a/b/c/g#s/./x",
-            "g#s/../x": b"http://a/b/c/g#s/../x",
+            b"g?y/./x": b"http://a/b/c/g?y/./x",
+            b"g?y/../x": b"http://a/b/c/g?y/../x",
+            b"g#s/./x": b"http://a/b/c/g#s/./x",
+            b"g#s/../x": b"http://a/b/c/g#s/../x",
         })
 
         # Some parsers allow the scheme name to be present in a relative
@@ -383,23 +376,23 @@ class ResolveURITestCase(TestCase):
         # compatibility.
         #
         # for strict parsers:
-        self.resolve_references({"http:g": b"http:g"}, strict=True)
+        self.resolve_references({b"http:g": b"http:g"}, strict=True)
         #
         # for backward compatibility:
-        self.resolve_references({"http:g": b"http://a/b/c/g"}, strict=False)
+        self.resolve_references({b"http:g": b"http://a/b/c/g"}, strict=False)
 
     def test_can_resolve_from_empty_path(self):
-        base = "http://example.com"
-        uri = resolve_uri(base, "foo")
+        base = b"http://example.com"
+        uri = resolve_uri(base, b"foo")
         assert uri == b"http://example.com/foo"
 
     def test_can_resolve_from_empty_uri(self):
-        base = ""
-        uri = resolve_uri(base, "foo")
+        base = b""
+        uri = resolve_uri(base, b"foo")
         assert uri == b"foo"
 
     def test_resolving_when_reference_is_none_returns_none(self):
-        base = "http://example.com"
+        base = b"http://example.com"
         uri = resolve_uri(base, None)
         assert uri is None
 
@@ -415,37 +408,37 @@ class ParseAuthorityTestCase(TestCase):
         assert port is None
 
     def test_can_parse_empty_authority(self):
-        user_info, host, port = parse_authority("")
+        user_info, host, port = parse_authority(b"")
         assert user_info is None
         assert host == b""
         assert port is None
 
     def test_can_parse_host_authority(self):
-        user_info, host, port = parse_authority("example.com")
+        user_info, host, port = parse_authority(b"example.com")
         assert user_info is None
         assert host == b"example.com"
         assert port is None
 
     def test_can_parse_host_port_authority(self):
-        user_info, host, port = parse_authority("example.com:6789")
+        user_info, host, port = parse_authority(b"example.com:6789")
         assert user_info is None
         assert host == b"example.com"
         assert port == 6789
 
     def test_can_parse_user_host_authority(self):
-        user_info, host, port = parse_authority("bob@example.com")
+        user_info, host, port = parse_authority(b"bob@example.com")
         assert user_info == b"bob"
         assert host == b"example.com"
         assert port is None
 
     def test_can_parse_email_user_host_authority(self):
-        user_info, host, port = parse_authority("bob@example.com@example.com")
+        user_info, host, port = parse_authority(b"bob@example.com@example.com")
         assert user_info == b"bob@example.com"
         assert host == b"example.com"
         assert port is None
 
     def test_can_parse_full_authority(self):
-        user_info, host, port = parse_authority("bob@example.com:6789")
+        user_info, host, port = parse_authority(b"bob@example.com:6789")
         assert user_info == b"bob"
         assert host == b"example.com"
         assert port == 6789
@@ -463,19 +456,19 @@ class ParsePathTestCase(TestCase):
         assert path is None
 
     def test_can_parse_empty_path(self):
-        path = parse_path("")
+        path = parse_path(b"")
         assert path == [""]
 
     def test_can_parse_absolute_path(self):
-        path = parse_path("/foo/bar")
+        path = parse_path(b"/foo/bar")
         assert path == ["", "foo", "bar"]
 
     def test_can_parse_relative_path(self):
-        path = parse_path("foo/bar")
+        path = parse_path(b"foo/bar")
         assert path == ["foo", "bar"]
 
     def test_can_parse_path_with_encoded_slash(self):
-        path = parse_path("/foo/bar%2Fbaz")
+        path = parse_path(b"/foo/bar%2Fbaz")
         assert path == ["", "foo", "bar/baz"]
 
 
@@ -487,32 +480,32 @@ class BuildPathTestCase(TestCase):
 class RemoveDotSegmentsTestCase(TestCase):
 
     def test_can_remove_dot_segments_pattern_1(self):
-        path_in = "/a/b/c/./../../g"
+        path_in = b"/a/b/c/./../../g"
         path_out = remove_dot_segments(path_in)
         assert path_out == b"/a/g"
 
     def test_can_remove_dot_segments_pattern_2(self):
-        path_in = "mid/content=5/../6"
+        path_in = b"mid/content=5/../6"
         path_out = remove_dot_segments(path_in)
         assert path_out == b"mid/6"
 
     def test_can_remove_dot_segments_when_single_dot(self):
-        path_in = "."
+        path_in = b"."
         path_out = remove_dot_segments(path_in)
         assert path_out == b""
 
     def test_can_remove_dot_segments_when_double_dot(self):
-        path_in = ".."
+        path_in = b".."
         path_out = remove_dot_segments(path_in)
         assert path_out == b""
 
     def test_can_remove_dot_segments_when_starts_with_single_dot(self):
-        path_in = "./a"
+        path_in = b"./a"
         path_out = remove_dot_segments(path_in)
         assert path_out == b"a"
 
     def test_can_remove_dot_segments_when_starts_with_double_dot(self):
-        path_in = "../a"
+        path_in = b"../a"
         path_out = remove_dot_segments(path_in)
         assert path_out == b"a"
 
@@ -524,42 +517,40 @@ class ParseParametersTestCase(TestCase):
         assert parsed is None
 
     def test_can_parse_empty_query(self):
-        parsed = parse_parameters("")
+        parsed = parse_parameters(b"")
         assert parsed == []
 
     def test_can_parse_value_only_query(self):
-        parsed = parse_parameters("foo")
+        parsed = parse_parameters(b"foo")
         assert parsed == [(None, "foo")]
 
     def test_can_parse_key_value_query(self):
-        parsed = parse_parameters("foo=bar")
+        parsed = parse_parameters(b"foo=bar")
         assert parsed == [("foo", "bar")]
 
     def test_can_parse_multi_key_value_query(self):
-        parsed = parse_parameters("foo=bar&spam=eggs")
+        parsed = parse_parameters(b"foo=bar&spam=eggs")
         assert parsed == [("foo", "bar"), ("spam", "eggs")]
 
     def test_can_parse_mixed_query(self):
-        parsed = parse_parameters("foo&spam=eggs")
+        parsed = parse_parameters(b"foo&spam=eggs")
         assert parsed == [(None, "foo"), ("spam", "eggs")]
 
     def test_can_parse_repeated_keys(self):
-        parsed = parse_parameters("foo=bar&foo=baz&spam=eggs")
+        parsed = parse_parameters(b"foo=bar&foo=baz&spam=eggs")
         assert parsed == [("foo", "bar"), ("foo", "baz"), ("spam", "eggs")]
 
     def test_can_handle_percent_decoding_while_parsing(self):
-        parsed = parse_parameters("ampersand=%26&equals=%3D")
+        parsed = parse_parameters(b"ampersand=%26&equals=%3D")
         assert parsed == [("ampersand", "&"), ("equals", "=")]
 
     def test_can_handle_alternative_separators(self):
-        parsed = parse_parameters("3:%33;S:%53", item_separator=";", key_separator=":")
+        parsed = parse_parameters(b"3:%33;S:%53", item_separator=b";", key_separator=b":")
         assert parsed == [("3", "3"), ("S", "S")]
 
     def test_can_parse_path_segment_with_parameters(self):
-        uri = "http://example.com/foo/name;version=1.2/bar"
-        _, _, path, _, _ = parse_uri(uri)
-        segments = parse_path(path)
-        parameters = parse_parameters(segments[2], item_separator=";")
+        path_segment = b"name;version=1.2"
+        parameters = parse_parameters(path_segment, item_separator=b";")
         assert parameters == [(None, "name"), ("version", "1.2")]
 
 

@@ -76,8 +76,7 @@ def parse_uri(uri):
 
     if uri is not None:
 
-        if not isinstance(uri, bytes):
-            uri = bstr(uri)
+        assert isinstance(uri, bytes)
 
         # Scheme
         q = uri.find(b":")
@@ -213,8 +212,7 @@ def parse_authority(authority):
 
     if authority is not None:
 
-        if not isinstance(authority, bytes):
-            authority = bstr(authority)
+        assert isinstance(authority, bytes)
 
         # User info
         p = authority.rfind(b"@")
@@ -269,8 +267,7 @@ def build_authority(user_info=None, host=None, port=None, **parts):
 def parse_path(path):
     if path is None:
         return None
-    if not isinstance(path, bytes):
-        path = bstr(path)
+    assert isinstance(path, bytes)
     return list(map(percent_decode, path.split(b"/")))
 
 
@@ -296,8 +293,7 @@ def remove_dot_segments(path):
     Interpret and remove the special "." and ".." complete path
     segments from a referenced path.
     """
-    if not isinstance(path, bytes):
-        path = bstr(path)
+    assert isinstance(path, bytes)
     new_path = b""
     while path:
         if path.startswith(b"../"):
@@ -329,14 +325,11 @@ def remove_dot_segments(path):
 def parse_parameters(parameters, item_separator=b"&", key_separator=b"="):
     if parameters is None:
         return None
-    if not isinstance(parameters, bytes):
-        parameters = bstr(parameters)
+    assert isinstance(parameters, bytes)
     parsed = []
     if parameters:
-        if not isinstance(item_separator, bytes):
-            item_separator = bstr(item_separator)
-        if not isinstance(key_separator, bytes):
-            key_separator = bstr(key_separator)
+        assert isinstance(item_separator, bytes)
+        assert isinstance(key_separator, bytes)
         parts = parameters.split(item_separator)
         for part in parts:
             if key_separator in part:
