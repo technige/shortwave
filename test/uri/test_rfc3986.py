@@ -18,8 +18,8 @@
 from collections import OrderedDict
 from unittest import TestCase
 
-from shortwave.uri.rfc3986 import percent_encode, percent_decode, parse_uri, resolve_uri, build_uri, \
-    parse_authority
+from shortwave.uri.rfc3986 import percent_encode, percent_decode, parse_uri, resolve_uri, \
+    build_uri, parse_authority, remove_dot_segments, parse_parameters, parse_path
 from shortwave.util.compat import ustr
 
 
@@ -111,53 +111,6 @@ class PercentDecodeTestCase(TestCase):
         assert decoded == "El Ni�"
 
 
-class ParseAuthorityTestCase(TestCase):
-    """    
-    """
-    
-    def test_can_parse_none_authority(self):
-        user_info, host, port = parse_authority(None)
-        assert user_info is None
-        assert host is None
-        assert port is None
-        
-    def test_can_parse_empty_authority(self):
-        user_info, host, port = parse_authority("")
-        assert user_info is None
-        assert host == b""
-        assert port is None
-        
-    def test_can_parse_host_authority(self):
-        user_info, host, port = parse_authority("example.com")
-        assert user_info is None
-        assert host == b"example.com"
-        assert port is None
-        
-    def test_can_parse_host_port_authority(self):
-        user_info, host, port = parse_authority("example.com:6789")
-        assert user_info is None
-        assert host == b"example.com"
-        assert port == 6789
-        
-    def test_can_parse_user_host_authority(self):
-        user_info, host, port = parse_authority("bob@example.com")
-        assert user_info == b"bob"
-        assert host == b"example.com"
-        assert port is None
-        
-    def test_can_parse_email_user_host_authority(self):
-        user_info, host, port = parse_authority("bob@example.com@example.com")
-        assert user_info == b"bob@example.com"
-        assert host == b"example.com"
-        assert port is None
-        
-    def test_can_parse_full_authority(self):
-        user_info, host, port = parse_authority("bob@example.com:6789")
-        assert user_info == b"bob"
-        assert host == b"example.com"
-        assert port == 6789
-        
-
 class ParseURITestCase(TestCase):
     def test_can_parse_none_uri(self):
         scheme, authority, path, query, fragment = parse_uri(None)
@@ -215,6 +168,14 @@ class ParseURITestCase(TestCase):
         assert query is None
         assert fragment is None
 
+    def test_can_parse_uri_without_scheme_but_with_port(self):
+        scheme, authority, path, query, fragment = parse_uri("//example.com:8080")
+        assert scheme is None
+        assert authority == b"example.com:8080"
+        assert path == b""
+        assert query is None
+        assert fragment is None
+
     def test_can_parse_simple_uri(self):
         scheme, authority, path, query, fragment = parse_uri("foo://example.com")
         assert scheme == b"foo"
@@ -247,9 +208,80 @@ class ParseURITestCase(TestCase):
         assert path == b"/over/there"
         assert query == b"name=ferret"
         assert fragment == b"nose"
+        
+
+class BuildURITestCase(TestCase):
+    """
+    """
+
+    def test_can_build_empty_uri(self):
+        built = build_uri()
+        assert built is b""
+
+    def test_can_build_uri_from_string(self):
+        built = build_uri(uri="foo://example.com/")
+        assert built == b"foo://example.com/"
+
+    def test_can_build_uri_from_hierarchical_part(self):
+        built = build_uri(hierarchical_part="//example.com/")
+        assert built == b"//example.com/"
+
+    def test_can_build_uri_from_scheme_and_hierarchical_part(self):
+        built = build_uri(scheme="foo", hierarchical_part="//example.com/")
+        assert built == b"foo://example.com/"
+
+    def test_can_build_uri_from_scheme_hierarchical_part_and_query(self):
+        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs")
+        assert built == b"foo://example.com/?spam=eggs"
+
+    def test_can_build_uri_from_scheme_hierarchical_part_query_and_fragment(self):
+        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs",
+                          fragment="mustard")
+        assert built == b"foo://example.com/?spam=eggs#mustard"
+
+    def test_can_build_uri_from_absolute_path_reference(self):
+        built = build_uri(absolute_path_reference="/foo/bar?spam=eggs#mustard")
+        assert built == b"/foo/bar?spam=eggs#mustard"
+
+    def test_can_build_uri_from_authority_and_absolute_path_reference(self):
+        built = build_uri(authority="bob@example.com:9999",
+                          absolute_path_reference="/foo/bar?spam=eggs#mustard")
+        assert built == b"//bob@example.com:9999/foo/bar?spam=eggs#mustard"
+
+    def test_can_build_uri_from_scheme_host_and_path(self):
+        built = build_uri(scheme="http", host="example.com", path="/foo/bar")
+        assert built == b"http://example.com/foo/bar"
+
+    def test_can_build_uri_from_scheme_and_host_port(self):
+        built = build_uri(scheme="http", host_port="example.com:3456")
+        assert built == b"http://example.com:3456"
+
+    def test_can_build_uri_from_scheme_authority_and_host_port(self):
+        built = build_uri(scheme="http", authority="bob@example.net:4567", host_port="example.com:3456")
+        assert built == b"http://bob@example.com:3456"
+
+    def test_can_build_uri_from_scheme_user_info_and_host_port(self):
+        built = build_uri(scheme="http", user_info="bob", host_port="example.com:3456")
+        assert built == b"http://bob@example.com:3456"
+
+    def test_can_build_uri_from_scheme_user_info_and_path(self):
+        built = build_uri(scheme="http", user_info="bob", path="/foo")
+        assert built == b"http://bob@/foo"
+
+    def test_can_build_uri_from_scheme_authority_and_host(self):
+        built = build_uri(scheme="http", authority="bob@example.net", host="example.com")
+        assert built == b"http://bob@example.com"
+
+    def test_can_build_uri_from_scheme_authority_and_port(self):
+        built = build_uri(scheme="http", authority="bob@example.com", port=3456)
+        assert built == b"http://bob@example.com:3456"
+
+    def test_can_build_uri_from_scheme_port_and_path(self):
+        built = build_uri(scheme="http", port=3456, path="/foo")
+        assert built == b"http://:3456/foo"
 
 
-class ReferenceResolutionTestCase(TestCase):
+class ResolveURITestCase(TestCase):
     """ RFC 3986, section 5.4.
     """
 
@@ -372,72 +404,160 @@ class ReferenceResolutionTestCase(TestCase):
         assert uri is None
 
 
-class URIConstructionTestCase(TestCase):
+class ParseAuthorityTestCase(TestCase):
     """
     """
 
-    def test_can_build_empty_uri(self):
-        built = build_uri()
-        assert built is b""
+    def test_can_parse_none_authority(self):
+        user_info, host, port = parse_authority(None)
+        assert user_info is None
+        assert host is None
+        assert port is None
 
-    def test_can_build_uri_from_string(self):
-        built = build_uri(uri="foo://example.com/")
-        assert built == b"foo://example.com/"
+    def test_can_parse_empty_authority(self):
+        user_info, host, port = parse_authority("")
+        assert user_info is None
+        assert host == b""
+        assert port is None
 
-    def test_can_build_uri_from_hierarchical_part(self):
-        built = build_uri(hierarchical_part="//example.com/")
-        assert built == b"//example.com/"
+    def test_can_parse_host_authority(self):
+        user_info, host, port = parse_authority("example.com")
+        assert user_info is None
+        assert host == b"example.com"
+        assert port is None
 
-    def test_can_build_uri_from_scheme_and_hierarchical_part(self):
-        built = build_uri(scheme="foo", hierarchical_part="//example.com/")
-        assert built == b"foo://example.com/"
+    def test_can_parse_host_port_authority(self):
+        user_info, host, port = parse_authority("example.com:6789")
+        assert user_info is None
+        assert host == b"example.com"
+        assert port == 6789
 
-    def test_can_build_uri_from_scheme_hierarchical_part_and_query(self):
-        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs")
-        assert built == b"foo://example.com/?spam=eggs"
+    def test_can_parse_user_host_authority(self):
+        user_info, host, port = parse_authority("bob@example.com")
+        assert user_info == b"bob"
+        assert host == b"example.com"
+        assert port is None
 
-    def test_can_build_uri_from_scheme_hierarchical_part_query_and_fragment(self):
-        built = build_uri(scheme="foo", hierarchical_part="//example.com/", query="spam=eggs",
-                          fragment="mustard")
-        assert built == b"foo://example.com/?spam=eggs#mustard"
+    def test_can_parse_email_user_host_authority(self):
+        user_info, host, port = parse_authority("bob@example.com@example.com")
+        assert user_info == b"bob@example.com"
+        assert host == b"example.com"
+        assert port is None
 
-    def test_can_build_uri_from_absolute_path_reference(self):
-        built = build_uri(absolute_path_reference="/foo/bar?spam=eggs#mustard")
-        assert built == b"/foo/bar?spam=eggs#mustard"
+    def test_can_parse_full_authority(self):
+        user_info, host, port = parse_authority("bob@example.com:6789")
+        assert user_info == b"bob"
+        assert host == b"example.com"
+        assert port == 6789
 
-    def test_can_build_uri_from_authority_and_absolute_path_reference(self):
-        built = build_uri(authority="bob@example.com:9999",
-                          absolute_path_reference="/foo/bar?spam=eggs#mustard")
-        assert built == b"//bob@example.com:9999/foo/bar?spam=eggs#mustard"
 
-    def test_can_build_uri_from_scheme_host_and_path(self):
-        built = build_uri(scheme="http", host="example.com", path="/foo/bar")
-        assert built == b"http://example.com/foo/bar"
+class BuildAuthorityTestCase(TestCase):
 
-    def test_can_build_uri_from_scheme_and_host_port(self):
-        built = build_uri(scheme="http", host_port="example.com:3456")
-        assert built == b"http://example.com:3456"
+    pass  # TODO
 
-    def test_can_build_uri_from_scheme_authority_and_host_port(self):
-        built = build_uri(scheme="http", authority="bob@example.net:4567", host_port="example.com:3456")
-        assert built == b"http://bob@example.com:3456"
 
-    def test_can_build_uri_from_scheme_user_info_and_host_port(self):
-        built = build_uri(scheme="http", user_info="bob", host_port="example.com:3456")
-        assert built == b"http://bob@example.com:3456"
+class ParsePathTestCase(TestCase):
 
-    def test_can_build_uri_from_scheme_user_info_and_path(self):
-        built = build_uri(scheme="http", user_info="bob", path="/foo")
-        assert built == b"http://bob@/foo"
+    def test_can_parse_none_path(self):
+        path = parse_path(None)
+        assert path is None
 
-    def test_can_build_uri_from_scheme_authority_and_host(self):
-        built = build_uri(scheme="http", authority="bob@example.net", host="example.com")
-        assert built == b"http://bob@example.com"
+    def test_can_parse_empty_path(self):
+        path = parse_path("")
+        assert path == [""]
 
-    def test_can_build_uri_from_scheme_authority_and_port(self):
-        built = build_uri(scheme="http", authority="bob@example.com", port=3456)
-        assert built == b"http://bob@example.com:3456"
+    def test_can_parse_absolute_path(self):
+        path = parse_path("/foo/bar")
+        assert path == ["", "foo", "bar"]
 
-    def test_can_build_uri_from_scheme_port_and_path(self):
-        built = build_uri(scheme="http", port=3456, path="/foo")
-        assert built == b"http://:3456/foo"
+    def test_can_parse_relative_path(self):
+        path = parse_path("foo/bar")
+        assert path == ["foo", "bar"]
+
+    def test_can_parse_path_with_encoded_slash(self):
+        path = parse_path("/foo/bar%2Fbaz")
+        assert path == ["", "foo", "bar/baz"]
+
+
+class BuildPathTestCase(TestCase):
+
+    pass  # TODO
+
+
+class RemoveDotSegmentsTestCase(TestCase):
+
+    def test_can_remove_dot_segments_pattern_1(self):
+        path_in = "/a/b/c/./../../g"
+        path_out = remove_dot_segments(path_in)
+        assert path_out == b"/a/g"
+
+    def test_can_remove_dot_segments_pattern_2(self):
+        path_in = "mid/content=5/../6"
+        path_out = remove_dot_segments(path_in)
+        assert path_out == b"mid/6"
+
+    def test_can_remove_dot_segments_when_single_dot(self):
+        path_in = "."
+        path_out = remove_dot_segments(path_in)
+        assert path_out == b""
+
+    def test_can_remove_dot_segments_when_double_dot(self):
+        path_in = ".."
+        path_out = remove_dot_segments(path_in)
+        assert path_out == b""
+
+    def test_can_remove_dot_segments_when_starts_with_single_dot(self):
+        path_in = "./a"
+        path_out = remove_dot_segments(path_in)
+        assert path_out == b"a"
+
+    def test_can_remove_dot_segments_when_starts_with_double_dot(self):
+        path_in = "../a"
+        path_out = remove_dot_segments(path_in)
+        assert path_out == b"a"
+
+
+class ParseParametersTestCase(TestCase):
+
+    def test_can_parse_none_query(self):
+        parsed = parse_parameters(None)
+        assert parsed is None
+
+    def test_can_parse_empty_query(self):
+        parsed = parse_parameters("")
+        assert parsed == []
+
+    def test_can_parse_value_only_query(self):
+        parsed = parse_parameters("foo")
+        assert parsed == [(None, "foo")]
+
+    def test_can_parse_key_value_query(self):
+        parsed = parse_parameters("foo=bar")
+        assert parsed == [("foo", "bar")]
+
+    def test_can_parse_multi_key_value_query(self):
+        parsed = parse_parameters("foo=bar&spam=eggs")
+        assert parsed == [("foo", "bar"), ("spam", "eggs")]
+
+    def test_can_parse_mixed_query(self):
+        parsed = parse_parameters("foo&spam=eggs")
+        assert parsed == [(None, "foo"), ("spam", "eggs")]
+
+    def test_can_parse_repeated_keys(self):
+        parsed = parse_parameters("foo=bar&foo=baz&spam=eggs")
+        assert parsed == [("foo", "bar"), ("foo", "baz"), ("spam", "eggs")]
+
+    def test_can_handle_percent_decoding_while_parsing(self):
+        parsed = parse_parameters("ampersand=%26&equals=%3D")
+        assert parsed == [("ampersand", "&"), ("equals", "=")]
+
+    def test_can_handle_alternative_separators(self):
+        parsed = parse_parameters("3:%33;S:%53", item_separator=";", key_separator=":")
+        assert parsed == [("3", "3"), ("S", "S")]
+
+    def test_can_parse_path_segment_with_parameters(self):
+        uri = "http://example.com/foo/name;version=1.2/bar"
+        _, _, path, _, _ = parse_uri(uri)
+        segments = parse_path(path)
+        parameters = parse_parameters(segments[2], item_separator=";")
+        assert parameters == [(None, "name"), ("version", "1.2")]
