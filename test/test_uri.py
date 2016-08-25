@@ -18,7 +18,7 @@
 from collections import OrderedDict
 from unittest import TestCase
 
-from shortwave.uri.rfc3986 import percent_encode, percent_decode, parse_uri, resolve_uri, \
+from shortwave.uri import percent_encode, percent_decode, parse_uri, resolve_uri, \
     build_uri, parse_authority, remove_dot_segments, parse_parameters, parse_path
 from shortwave.util.compat import ustr
 
