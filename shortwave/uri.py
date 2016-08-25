@@ -26,17 +26,19 @@ from re import compile as re_compile
 from shortwave.util.compat import bstr, xstr, quote, unquote
 
 # RFC 3986 § 2.2.
-general_delimiters = ":/?#[]@"
-subcomponent_delimiters = "!$&'()*+,;="
+general_delimiters = b":/?#[]@"
+subcomponent_delimiters = b"!$&'()*+,;="
 reserved = general_delimiters + subcomponent_delimiters
 
 # RFC 3986 § 2.3.
-unreserved = ("ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-              "abcdefghijklmnopqrstuvwxyz"
-              "0123456789-._~")
+unreserved = (b"ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+              b"abcdefghijklmnopqrstuvwxyz"
+              b"0123456789-._~")
 
 # Section 3.1.
 scheme_pattern = re_compile(b"[A-Za-z][+\-.0-9A-Za-z]*$")
+
+uri_template_pattern = re_compile(b"(\{)([^{}]*)(\})")
 
 
 # RFC 3986 § 2.1.
@@ -343,3 +345,119 @@ def parse_parameters(parameters, item_separator=b"&", key_separator=b"="):
                 key, value = None, percent_decode(part)
             parsed.append((key, value))
     return parsed
+
+
+class URIExpander(object):
+
+    _operators = set(b"+#./;?&")
+
+    def __init__(self, values):
+        self.values = values
+
+    def collect(self, *keys):
+        """ Fetch a list of all values matching the keys supplied,
+        returning (key, value) pairs for each.
+        """
+        items = []
+        for key in keys:
+            if key.endswith(b"*"):
+                key, explode = key[:-1], True
+            else:
+                explode = False
+            if b":" in key:
+                key, max_length = key.partition(b":")[0::2]
+                max_length = int(max_length)
+            else:
+                max_length = None
+            value = self.values.get(key)
+            if isinstance(value, dict):
+                if not value:
+                    items.append((key, None))
+                elif explode:
+                    items.extend((key, _) for _ in value.items())
+                else:
+                    items.append((key, value))
+            elif isinstance(value, (tuple, list)):
+                if explode:
+                    items.extend((key, _) for _ in value)
+                else:
+                    items.append((key, list(value)))
+            elif max_length is not None:
+                items.append((key, value[:max_length]))
+            else:
+                items.append((key, value))
+        return [(key, value) for key, value in items if value is not None]
+
+    def _expand(self, expression, safe=None, prefix=b"", separator=b",",
+                with_keys=False, trim_empty_equals=False):
+        items = self.collect(*expression.split(b","))
+        encode = lambda x: percent_encode(x, safe=safe)
+        for i, (key, value) in enumerate(items):
+            if isinstance(value, tuple):
+                items[i] = b"=".join(map(encode, value))
+            else:
+                if isinstance(value, dict):
+                    items[i] = b",".join(b",".join(map(encode, item))
+                                         for item in value.items())
+                elif isinstance(value, list):
+                    items[i] = b",".join(map(encode, value))
+                else:
+                    items[i] = encode(value)
+                if with_keys:
+                    if items[i] is None or (items[i] == b"" and
+                                            trim_empty_equals):
+                        items[i] = encode(key)
+                    else:
+                        items[i] = encode(key) + b"=" + (items[i] or b"")
+        out = []
+        for i, item in enumerate(items):
+            out.append(prefix if i == 0 else separator)
+            out.append(item)
+        return b"".join(out)
+
+    def expand(self, expression):
+        """ Dispatch to the correct expansion method.
+        """
+        if not expression:
+            return b""
+        if expression[0] in self._operators:
+            operator, expression = expression[:1], expression[1:]
+            if operator == b"+":
+                return self._expand(expression, reserved)
+            elif operator == b"#":
+                return self._expand(expression, reserved, prefix=b"#")
+            elif operator == b".":
+                return self._expand(expression, prefix=b".", separator=b".")
+            elif operator == b"/":
+                return self._expand(expression, prefix=b"/", separator=b"/")
+            elif operator == b";":
+                return self._expand(expression, prefix=b";", separator=b";",
+                                    with_keys=True, trim_empty_equals=True)
+            elif operator == b"?":
+                return self._expand(expression, prefix=b"?", separator=b"&",
+                                    with_keys=True)
+            elif operator == b"&":
+                return self._expand(expression, prefix=b"&", separator=b"&",
+                                    with_keys=True)
+        else:
+            return self._expand(expression)
+
+
+def expand_uri(template, values):
+    """ Expand a URI template into a URI using the dictionary of values supplied.
+    """
+    if template is None:
+        return None
+    assert isinstance(template, bytes)
+    tokens = uri_template_pattern.split(template)
+    expand = URIExpander(values).expand
+    out = []
+    while tokens:
+        token = tokens.pop(0)
+        if token == b"{":
+            expression = tokens.pop(0)
+            assert tokens.pop(0) == b"}"
+            out.append(expand(expression))
+        else:
+            out.append(token)
+    return b"".join(out)

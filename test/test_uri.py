@@ -19,7 +19,7 @@ from collections import OrderedDict
 from unittest import TestCase
 
 from shortwave.uri import percent_encode, percent_decode, parse_uri, resolve_uri, \
-    build_uri, parse_authority, remove_dot_segments, parse_parameters, parse_path
+    build_uri, parse_authority, remove_dot_segments, parse_parameters, parse_path, expand_uri
 from shortwave.util.compat import ustr
 
 
@@ -561,3 +561,180 @@ class ParseParametersTestCase(TestCase):
         segments = parse_path(path)
         parameters = parse_parameters(segments[2], item_separator=";")
         assert parameters == [(None, "name"), ("version", "1.2")]
+
+
+class ExpandURITestCase(TestCase):
+
+    def test_expansion_with_no_variables(self):
+        template = b"{}"
+        uri = expand_uri(template, {})
+        assert uri == b""
+
+    def assert_expansions(self, expansions):
+        variables = {
+            b"count": (b"one", b"two", b"three"),
+            b"dom": (b"example", b"com"),
+            b"dub": b"me/too",
+            b"hello": b"Hello World!",
+            b"half": b"50%",
+            b"var": b"value",
+            b"who": b"fred",
+            b"base": b"http://example.com/home/",
+            b"path": b"/foo/bar",
+            b"list": (b"red", b"green", b"blue"),
+            b"keys": OrderedDict([(b"semi", b";"), (b"dot", b"."), (b"comma", b",")]),
+            b"v": b"6",
+            b"x": b"1024",
+            b"y": b"768",
+            b"empty": b"",
+            b"empty_keys": dict([]),
+            b"undef": None,
+        }
+        for template, expansion in expansions.items():
+            print(template, "->", expansion)
+            uri = expand_uri(template, variables)
+            assert uri == expansion
+
+    def test_empty_expansion(self):
+        self.assert_expansions({
+            None: None,
+            b"": b"",
+        })
+
+    def test_can_expand_simple_strings(self):
+        self.assert_expansions({
+            b"{var}": b"value",
+            b"{hello}": b"Hello%20World%21",
+            b"{half}": b"50%25",
+            b"O{empty}X": b"OX",
+            b"O{undef}X": b"OX",
+            b"{x,y}": b"1024,768",
+            b"{x,hello,y}": b"1024,Hello%20World%21,768",
+            b"?{x,empty}": b"?1024,",
+            b"?{x,undef}": b"?1024",
+            b"?{undef,y}": b"?768",
+            b"{var:3}": b"val",
+            b"{var:30}": b"value",
+            b"{list}": b"red,green,blue",
+            b"{list*}": b"red,green,blue",
+            b"{keys}": b"semi,%3B,dot,.,comma,%2C",
+            b"{keys*}": b"semi=%3B,dot=.,comma=%2C",
+        })
+
+    def test_can_expand_reserved_strings(self):
+        self.assert_expansions({
+            b"{+var}": b"value",
+            b"{+hello}": b"Hello%20World!",
+            b"{+half}": b"50%25",
+            b"{base}index": b"http%3A%2F%2Fexample.com%2Fhome%2Findex",
+            b"{+base}index": b"http://example.com/home/index",
+            b"O{+empty}X": b"OX",
+            b"O{+undef}X": b"OX",
+            b"{+path}/here": b"/foo/bar/here",
+            b"here?ref={+path}": b"here?ref=/foo/bar",
+            b"up{+path}{var}/here": b"up/foo/barvalue/here",
+            b"{+x,hello,y}": b"1024,Hello%20World!,768",
+            b"{+path,x}/here": b"/foo/bar,1024/here",
+            b"{+path:6}/here": b"/foo/b/here",
+            b"{+list}": b"red,green,blue",
+            b"{+list*}": b"red,green,blue",
+            b"{+keys}": b"semi,;,dot,.,comma,,",
+            b"{+keys*}": b"semi=;,dot=.,comma=,",
+        })
+
+    def test_can_expand_fragments(self):
+        self.assert_expansions({
+            b"{#var}": b"#value",
+            b"{#hello}": b"#Hello%20World!",
+            b"{#half}": b"#50%25",
+            b"foo{#empty}": b"foo#",
+            b"foo{#undef}": b"foo",
+            b"{#x,hello,y}": b"#1024,Hello%20World!,768",
+            b"{#path,x}/here": b"#/foo/bar,1024/here",
+            b"{#path:6}/here": b"#/foo/b/here",
+            b"{#list}": b"#red,green,blue",
+            b"{#list*}": b"#red,green,blue",
+            b"{#keys}": b"#semi,;,dot,.,comma,,",
+            b"{#keys*}": b"#semi=;,dot=.,comma=,",
+        })
+
+    def test_can_expand_labels(self):
+        self.assert_expansions({
+            b"{.who}": b".fred",
+            b"{.who,who}": b".fred.fred",
+            b"{.half,who}": b".50%25.fred",
+            b"www{.dom*}": b"www.example.com",
+            b"X{.var}": b"X.value",
+            b"X{.empty}": b"X.",
+            b"X{.undef}": b"X",
+            b"X{.var:3}": b"X.val",
+            b"X{.list}": b"X.red,green,blue",
+            b"X{.list*}": b"X.red.green.blue",
+            b"X{.keys}": b"X.semi,%3B,dot,.,comma,%2C",
+            b"X{.keys*}": b"X.semi=%3B.dot=..comma=%2C",
+            b"X{.empty_keys}": b"X",
+            b"X{.empty_keys*}": b"X",
+        })
+
+    def test_can_expand_path_segments(self):
+        self.assert_expansions({
+            b"{/who}": b"/fred",
+            b"{/who,who}": b"/fred/fred",
+            b"{/half,who}": b"/50%25/fred",
+            b"{/who,dub}": b"/fred/me%2Ftoo",
+            b"{/var}": b"/value",
+            b"{/var,empty}": b"/value/",
+            b"{/var,undef}": b"/value",
+            b"{/var,x}/here": b"/value/1024/here",
+            b"{/var:1,var}": b"/v/value",
+            b"{/list}": b"/red,green,blue",
+            b"{/list*}": b"/red/green/blue",
+            b"{/list*,path:4}": b"/red/green/blue/%2Ffoo",
+            b"{/keys}": b"/semi,%3B,dot,.,comma,%2C",
+            b"{/keys*}": b"/semi=%3B/dot=./comma=%2C",
+        })
+
+    def test_can_expand_path_parameters(self):
+        self.assert_expansions({
+            b"{;who}": b";who=fred",
+            b"{;half}": b";half=50%25",
+            b"{;empty}": b";empty",
+            b"{;v,empty,who}": b";v=6;empty;who=fred",
+            b"{;v,bar,who}": b";v=6;who=fred",
+            b"{;x,y}": b";x=1024;y=768",
+            b"{;x,y,empty}": b";x=1024;y=768;empty",
+            b"{;x,y,undef}": b";x=1024;y=768",
+            b"{;hello:5}": b";hello=Hello",
+            b"{;list}": b";list=red,green,blue",
+            b"{;list*}": b";list=red;list=green;list=blue",
+            b"{;keys}": b";keys=semi,%3B,dot,.,comma,%2C",
+            b"{;keys*}": b";semi=%3B;dot=.;comma=%2C",
+        })
+
+    def test_can_expand_form_queries(self):
+        self.assert_expansions({
+            b"{?who}": b"?who=fred",
+            b"{?half}": b"?half=50%25",
+            b"{?x,y}": b"?x=1024&y=768",
+            b"{?x,y,empty}": b"?x=1024&y=768&empty=",
+            b"{?x,y,undef}": b"?x=1024&y=768",
+            b"{?var:3}": b"?var=val",
+            b"{?list}": b"?list=red,green,blue",
+            b"{?list*}": b"?list=red&list=green&list=blue",
+            b"{?keys}": b"?keys=semi,%3B,dot,.,comma,%2C",
+            b"{?keys*}": b"?semi=%3B&dot=.&comma=%2C",
+        })
+
+    def test_can_expand_form_query_continuations(self):
+        self.assert_expansions({
+            b"{&who}": b"&who=fred",
+            b"{&half}": b"&half=50%25",
+            b"?fixed=yes{&x}": b"?fixed=yes&x=1024",
+            b"{&x,y,empty}": b"&x=1024&y=768&empty=",
+            b"{&x,y,undef}": b"&x=1024&y=768",
+            b"{&var:3}": b"&var=val",
+            b"{&list}": b"&list=red,green,blue",
+            b"{&list*}": b"&list=red&list=green&list=blue",
+            b"{&keys}": b"&keys=semi,%3B,dot,.,comma,%2C",
+            b"{&keys*}": b"&semi=%3B&dot=.&comma=%2C",
+        })
