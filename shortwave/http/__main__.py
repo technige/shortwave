@@ -17,7 +17,8 @@
 
 from argparse import ArgumentParser
 from logging import INFO, DEBUG
-from sys import argv, stdout
+from os import write
+from sys import argv, stdin, stdout
 
 from shortwave.http import HTTP
 from shortwave.uri import parse_uri, build_uri
@@ -31,7 +32,7 @@ def usage():
     print("       shortwave.http delete <uri>")
 
 
-def get(prog, method, *args):
+def get(prog, method, *args, encoding="UTF-8"):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri [uri ...]".format(method))
     parser.add_argument("-1", "--single-receiver", action="store_true")
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
@@ -48,10 +49,12 @@ def get(prog, method, *args):
         receiver.start()
     else:
         receiver = None
+
+    fd = stdout.fileno()
     responses = []
     try:
         for uri in parsed.uri:
-            scheme, authority, path, query, fragment = parse_uri(uri)
+            scheme, authority, path, query, fragment = parse_uri(uri.encode(encoding))
             if scheme and scheme != b"http":
                 raise ValueError("Non-HTTP URI: %r" % uri)
             if authority:
@@ -64,14 +67,14 @@ def get(prog, method, *args):
     finally:
         for _, response in responses:
             data = response.read()
-            stdout.write(data.decode(stdout.encoding))
+            write(fd, data)
         for http, _ in responses:
             http.close()
         if receiver:
             receiver.stop()
 
 
-def post(prog, method, *args):
+def post(prog, method, *args, encoding="UTF-8"):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -83,18 +86,20 @@ def post(prog, method, *args):
         watch("shortwave.http", level=INFO)
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
-    scheme, authority, path, query, fragment = parse_uri(parsed.uri)
+
+    fd = stdout.fileno()
+    scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(encoding))
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
     try:
         with http.post(ref_uri, parsed.body) as response:
             data = response.read()
-            stdout.write(data.decode(stdout.encoding))
+            write(fd, data)
     finally:
         http.close()
 
 
-def put(prog, method, *args):
+def put(prog, method, *args, encoding="UTF-8"):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -106,18 +111,20 @@ def put(prog, method, *args):
         watch("shortwave.http", level=INFO)
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
-    scheme, authority, path, query, fragment = parse_uri(parsed.uri)
+
+    fd = stdout.fileno()
+    scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(encoding))
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
     try:
         with http.put(ref_uri, parsed.body) as response:
             data = response.read()
-            stdout.write(data.decode(stdout.encoding))
+            write(fd, data)
     finally:
         http.close()
 
 
-def delete(prog, method, *args):
+def delete(prog, method, *args, encoding="UTF-8"):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri".format(method))
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -128,13 +135,15 @@ def delete(prog, method, *args):
         watch("shortwave.http", level=INFO)
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
-    scheme, authority, path, query, fragment = parse_uri(parsed.uri)
+
+    fd = stdout.fileno()
+    scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(encoding))
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
     try:
         with http.delete(ref_uri) as response:
             data = response.read()
-            stdout.write(data.decode(stdout.encoding))
+            write(fd, data)
     finally:
         http.close()
 
@@ -144,13 +153,13 @@ def main():
     if len(argv) == 1 or argv[1] == "help":
         usage()
     elif argv[1] == "get":
-        get(*argv)
+        get(*argv, encoding=stdin.encoding)
     elif argv[1] == "post":
-        post(*argv)
+        post(*argv, encoding=stdin.encoding)
     elif argv[1] == "put":
-        put(*argv)
+        put(*argv, encoding=stdin.encoding)
     elif argv[1] == "delete":
-        delete(*argv)
+        delete(*argv, encoding=stdin.encoding)
     else:
         usage()
 

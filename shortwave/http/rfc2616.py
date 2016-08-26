@@ -256,7 +256,7 @@ class HTTP(Connection):
         try:
             response.on_complete()
         finally:
-            # log.debug("Marking %r as complete", response)
+            log.debug("Marking %r as complete", response)
             response.complete.set()
             self.responses.popleft()
             headers = self.response_headers
@@ -289,7 +289,8 @@ class HTTPResponse(object):
         pass
 
     def sync(self, timeout=None):
-        # log.debug("Waiting for %r to complete", self)
+        log.debug("Waiting for %r to complete", self)
+        # TODO: handle keyboard interruption
         if self.complete.wait(timeout):
             return self
         else:
