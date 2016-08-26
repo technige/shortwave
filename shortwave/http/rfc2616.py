@@ -234,11 +234,41 @@ class HTTP(Connection):
             finally:
                 self.response_headers[name] = value
         else:
-            self.data_limit = int(self.response_headers.get("content-length", 0))  # TODO: substitute with content-length (or chunking)
-            if self.data_limit:
-                self.response_handler = self.on_fixed_length_content
+            if self.response_headers.get("transfer-encoding", b"").lower() == b"chunked":
+                self.data_limit = b"\r\n"
+                self.response_handler = self.on_chunk_size
             else:
-                self.on_complete(response)
+                self.data_limit = int(self.response_headers.get("content-length", 0))
+                if self.data_limit:
+                    self.response_handler = self.on_fixed_length_content
+                else:
+                    # TODO determine whether there is no content or whether content ends on close
+                    self.on_complete(response)
+
+    def on_chunk_size(self, response, data):
+        self.data_limit = response.chunk_size = int(data, 16)
+        # TODO: parse chunk extensions <https://tools.ietf.org/html/rfc7230#section-4.1.1>
+        self.response_handler = self.on_chunk_data
+
+    def on_chunk_data(self, response, data):
+        if len(data) > 1024:
+            log.info("R[%d]: %d bytes", self.fd, len(data))
+        else:
+            log.info("R[%d]: %r", self.fd, bytes(data))
+        try:
+            response.on_content(data)
+        finally:
+            self.data_limit -= len(data)
+            if self.data_limit == 0:
+                self.data_limit = b"\r\n"
+                self.response_handler = self.on_chunk_trailer
+
+    def on_chunk_trailer(self, response, data):
+        # TODO: parse chunk trailer <https://tools.ietf.org/html/rfc7230#section-4.1.2>
+        if response.chunk_size == 0:
+            self.on_complete(response)
+        else:
+            self.response_handler = self.on_chunk_size
 
     def on_fixed_length_content(self, response, data):
         if len(data) > 1024:
@@ -276,6 +306,7 @@ class HTTPResponse(object):
         self.status_code = None
         self.reason_phrase = None
         self.headers = HeaderDict()
+        self.chunk_size = None
         self.body = bytearray()
         self.complete = Event()
 
