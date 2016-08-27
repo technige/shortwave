@@ -1,5 +1,5 @@
 <?php
-header('Content-Type: text/plain; charset=UTF-8');
+header('Content-Type: text/plain');
 $count = $_SERVER['QUERY_STRING'];
 if ($count == '') {
 	$count = 3;

@@ -1,5 +1,5 @@
 <?php
-header('Content-Type: text/plain; charset=UTF-8');
+header('Content-Type: text/plain');
 header('Connection: close');
-print('Hasta la vista, baby.');
+print('Hasta la vista, baby.\n');
 ?>

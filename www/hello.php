@@ -1,4 +1,4 @@
 <?php
-header('Content-Type: text/plain; charset=UTF-8');
+header('Content-Type: text/plain');
 print("hello, world\r\n");
 ?>

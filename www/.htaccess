@@ -1,4 +1,10 @@
-AddType application/x-httpd-php .php
-BrowserMatchNoCase "old" nokeepalive force-response-1.0 downgrade-1.0
-SetEnv no-gzip 1
+#AddType application/x-httpd-php .php
+#BrowserMatchNoCase "old" nokeepalive force-response-1.0 downgrade-1.0
+#SetEnv no-gzip 1
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^([^/.]+)$ $1.php [L]
+    RewriteRule ^([^/.]+)/(.*)$ $1.php/$2 [L]
+</IfModule>
 

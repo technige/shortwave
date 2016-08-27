@@ -8,5 +8,5 @@ if (strlen($code) == 0) {
 	$code = urldecode($code);
 	header("HTTP/1.1 $code");
 }
-header('Content-Type: text/plain; charset=UTF-8');
+header('Content-Type: text/plain');
 ?>
