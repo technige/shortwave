@@ -22,8 +22,9 @@ from socket import socket as _socket, error as socket_error, \
     AF_INET, SOCK_STREAM, IPPROTO_TCP, TCP_NODELAY, SHUT_RD, SHUT_WR
 from threading import Thread
 
-from shortwave.util.compat import integer
-from shortwave.util.concurrency import sync
+from shortwave.concurrency import sync
+
+from shortwave.compat import integer
 
 log = getLogger("shortwave.transmission")
 

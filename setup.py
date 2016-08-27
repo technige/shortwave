@@ -24,7 +24,7 @@ except ImportError:
 from shortwave import __author__, __email__, __license__, __package__, __version__
 
 
-packages = find_packages(exclude=("demo", "demo.*", "test", "test.*"))
+packages = find_packages(exclude=("test", "test.*"))
 package_metadata = {
     "name": __package__,
     "version": __version__,

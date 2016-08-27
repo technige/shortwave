@@ -22,10 +22,10 @@ from logging import getLogger
 from threading import Event
 
 from shortwave import Connection, Transmitter
+from shortwave.compat import bstr
 from shortwave.messaging import SP, CR_LF, HeaderDict, header_names, parse_header
 from shortwave.numbers import HTTP_PORT
 from shortwave.uri import parse_authority, parse_uri, build_uri
-from shortwave.util.compat import bstr
 
 HTTP_VERSION = b"HTTP/1.1"
 

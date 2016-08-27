@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from shortwave.util.compat import bstr, xstr, SPACE
+from shortwave.compat import bstr, xstr, SPACE
 
 
 SP = b" "

@@ -23,7 +23,7 @@ See: http://www.ietf.org/rfc/rfc3986.txt
 
 from re import compile as re_compile
 
-from shortwave.util.compat import bstr, xstr, quote, unquote
+from shortwave.compat import bstr, xstr, quote, unquote
 
 # RFC 3986 § 2.2.
 general_delimiters = b":/?#[]@"

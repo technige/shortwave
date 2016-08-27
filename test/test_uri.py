@@ -18,9 +18,9 @@
 from collections import OrderedDict
 from unittest import TestCase
 
+from shortwave.compat import ustr
 from shortwave.uri import percent_encode, percent_decode, parse_uri, resolve_uri, \
     build_uri, parse_authority, remove_dot_segments, parse_parameters, parse_path, expand_uri
-from shortwave.util.compat import ustr
 
 
 class PercentEncodeTestCase(TestCase):

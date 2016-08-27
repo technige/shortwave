@@ -22,7 +22,7 @@ from sys import argv, stdin, stdout
 
 from shortwave.http import HTTP
 from shortwave.uri import parse_uri, build_uri
-from shortwave.util.watcher import watch
+from shortwave.watcher import watch
 
 
 def usage():
