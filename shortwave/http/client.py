@@ -282,11 +282,10 @@ class HTTP(Connection):
                 self.on_complete(response)
 
     def on_complete(self, response):
+        log.debug("Marking %r as complete", response)
         try:
-            response.on_complete()
+            response.end.set()
         finally:
-            log.debug("Marking %r as complete", response)
-            response.complete.set()
             self.responses.popleft()
             headers = self.response_headers
             connection = headers.get(b"connection", connection_default[response.http_version])
@@ -307,7 +306,7 @@ class HTTPResponse(object):
         self.headers = HeaderDict()
         self.chunk_size = None
         self.body = bytearray()
-        self.complete = Event()
+        self.end = Event()
 
     def __repr__(self):
         return "<%s at 0x%x>" % (self.__class__.__name__, id(self))
@@ -321,7 +320,7 @@ class HTTPResponse(object):
     def sync(self, timeout=None):
         log.debug("Waiting for %r to complete", self)
         # TODO: handle keyboard interruption
-        if self.complete.wait(timeout):
+        if self.end.wait(timeout):
             return self
         else:
             return None
@@ -361,9 +360,6 @@ class HTTPResponse(object):
 
     def on_content(self, data):
         self.body[len(self.body):] = data
-
-    def on_complete(self):
-        pass
 
 
 def basic_auth(*args):

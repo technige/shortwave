@@ -36,7 +36,7 @@ class GetMethodTestCase(TestCase):
         assert response.reason_phrase == b"OK"
         assert response.headers["Content-Type"].startswith(b"text/plain")
         assert response.content() == "hello, world\r\n"
-        assert response.complete
+        assert response.end.is_set()
 
     def test_asynchronous_get_method(self):
         from shortwave.http import HTTP
@@ -49,7 +49,7 @@ class GetMethodTestCase(TestCase):
             assert response.reason_phrase == b"OK"
             assert response.headers["Content-Type"].startswith(b"text/plain")
             assert response.content() == "hello, world\r\n"
-            assert response.complete
+            assert response.end.is_set()
         finally:
             http.close()
 
