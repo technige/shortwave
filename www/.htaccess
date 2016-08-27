@@ -1,0 +1,4 @@
+AddType application/x-httpd-php .php
+BrowserMatchNoCase "old" nokeepalive force-response-1.0 downgrade-1.0
+SetEnv no-gzip 1
+
