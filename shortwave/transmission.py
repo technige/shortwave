@@ -48,7 +48,7 @@ class Transmitter(object):
 
 
 class Receiver(Thread):
-    """ An Receiver handles the incoming halves of one or more network
+    """ A Receiver handles the incoming halves of one or more network
     conversations.
     """
 

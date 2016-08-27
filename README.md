@@ -1,11 +1,15 @@
-# Shortwave
+![Shortwave](www/shortwave-pixels-black.png)
 
-**CAUTION: Alpha and Linux-only right now!**
+----
+
+**CAREFUL NOW! This library is not yet ready for production use and currently only works on Linux systems that provide *epoll*.**
+
+----
 
 Shortwave is a library of components for Python network applications.
 It has been put together from separate modules, libraries and applications that I have worked on over the years.
 
-The library is currently only alpha quality but is coming together quickly.
+The library is coming together quickly.
 Much of the pre-existing code is well tested and the job is to bring these parts together as a coherent whole.
 
 So far, Shortwave consists of the following:
@@ -25,15 +29,32 @@ An implementation of RFC 822 plus some other utilities for network messaging.
 
 ## `shortwave.http`
 
-An implementation of RFC 2616 (client).
+An HTTP client implementation.
 
 
 ## `shortwave.uri`
 
-An implementation of RFC 3986.
+A collection of URI and URI template functions as described by RFCs 3986 and 6570.
 
 
 ----
 
-
 **TODO: Lots. Working on it.**
+
+----
+
+## Command Line Usage
+
+Install the command line interface by running `python setup.py develop`.
+
+### GET a web page
+
+```
+shortwave.http get -v http://shortwave.tech/hello
+```
+
+### POSTing data
+
+```
+shortwave.http post -j -v http://shortwave.tech/json '{"greeting": "hello, world"}'
+```

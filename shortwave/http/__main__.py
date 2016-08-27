@@ -76,6 +76,7 @@ def get(prog, method, *args, encoding="UTF-8"):
 
 def post(prog, method, *args, encoding="UTF-8"):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
+    parser.add_argument("-j", "--json", action="store_true")
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--very-verbose", action="store_true")
@@ -91,8 +92,11 @@ def post(prog, method, *args, encoding="UTF-8"):
     scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(encoding))
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
+    headers = {}
+    if parsed.json:
+        headers["content_type"] = b"application/json"
     try:
-        with http.post(ref_uri, parsed.body) as response:
+        with http.post(ref_uri, parsed.body, **headers) as response:
             data = response.read()
             write(fd, data)
     finally:
@@ -101,6 +105,7 @@ def post(prog, method, *args, encoding="UTF-8"):
 
 def put(prog, method, *args, encoding="UTF-8"):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
+    parser.add_argument("-j", "--json", action="store_true")
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--very-verbose", action="store_true")
@@ -116,8 +121,11 @@ def put(prog, method, *args, encoding="UTF-8"):
     scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(encoding))
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     ref_uri = build_uri(path=path, query=query, fragment=fragment)
+    headers = {}
+    if parsed.json:
+        headers["content_type"] = b"application/json"
     try:
-        with http.put(ref_uri, parsed.body) as response:
+        with http.put(ref_uri, parsed.body, **headers) as response:
             data = response.read()
             write(fd, data)
     finally:
