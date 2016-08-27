@@ -27,7 +27,7 @@ AT_SIGN = b"@"
 NUMBER_SIGN = b"#"
 QUESTION_MARK = b"?"
 
-CR_LF = CR + LF
+CRLF = CR + LF
 SLASH_SLASH = SLASH + SLASH
 
 
@@ -125,7 +125,7 @@ class HeaderDict(dict):
     def to_bytes(self):
         b = []
         for name, value in sorted(self.items()):
-            b += [name, b": ", value, CR_LF]
+            b += [name, b": ", value, CRLF]
         return b"".join(b)
 
 

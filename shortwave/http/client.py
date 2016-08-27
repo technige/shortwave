@@ -23,7 +23,7 @@ from threading import Event
 
 from shortwave import Connection, Transmitter
 from shortwave.compat import bstr
-from shortwave.messaging import SP, CR_LF, HeaderDict, header_names, parse_header
+from shortwave.messaging import SP, CRLF, HeaderDict, header_names, parse_header
 from shortwave.numbers import HTTP_PORT
 from shortwave.uri import parse_authority, parse_uri, build_uri
 
@@ -82,12 +82,12 @@ class HTTPTransmitter(Transmitter):
             log.info("T[%d]: %s", self.fd, line)
         super(HTTPTransmitter, self).transmit(*data)
 
-    def request(self, method, uri, body=None, **headers):
+    def transmit_request(self, method, target, body=None, **headers):
         if not isinstance(method, bytes):
             method = bstr(method)
 
-        if not isinstance(uri, bytes):
-            uri = bstr(uri)
+        if not isinstance(target, bytes):
+            target = bstr(target)
 
         transmit = self.transmit
         request_headers = self.headers.copy()
@@ -96,15 +96,14 @@ class HTTPTransmitter(Transmitter):
             # A callable body signals that we want to send chunked content
             request_headers[b"Transfer-Encoding"] = b"chunked"
             request_headers.update(headers)
-            transmit(method, SP, uri, SP, HTTP_VERSION, CR_LF,
-                     request_headers.to_bytes(), CR_LF)
+            transmit(method, SP, target, SP, HTTP_VERSION, CRLF, request_headers.to_bytes(), CRLF)
             for chunk in body():
                 if not isinstance(chunk, bytes):
                     chunk = bstr(chunk)
                 chunk_size = len(chunk)
                 if chunk_size:
-                    transmit("{:X}".format(chunk_size).encode("utf-8"), CR_LF, chunk, CR_LF)
-            transmit(b"0", CR_LF, CR_LF)
+                    transmit("{:X}".format(chunk_size).encode("utf-8"), CRLF, chunk, CRLF)
+            transmit(b"0", CRLF, CRLF)
 
         else:
             # Fixed-length content
@@ -120,8 +119,8 @@ class HTTPTransmitter(Transmitter):
                 content_length_bytes = bstr(content_length)
                 request_headers[b"Content-Length"] = content_length_bytes
             request_headers.update(headers)
-            transmit(method, SP, uri, SP, HTTP_VERSION, CR_LF,
-                     request_headers.to_bytes(), CR_LF, body)
+            transmit(method, SP, target, SP, HTTP_VERSION, CRLF,
+                     request_headers.to_bytes(), CRLF, body)
 
 
 class HTTP(Connection):
@@ -141,76 +140,76 @@ class HTTP(Connection):
         self.response_handler = self.on_status_line
         self.response_headers = HeaderDict()
 
-    def options(self, uri=b"*", response=None, **headers):
-        """ Make an OPTIONS request to the remote host.
-        """
-        if response is None:
-            response = HTTPResponse()
-        self.responses.append(response)
-        self.transmitter.request(b"OPTIONS", uri, **headers)
-        return response
-
-    def get(self, uri, response=None, **headers):
+    def get(self, target, response=None, **headers):
         """ Make an asynchronous GET request to the remote host.
         """
         if response is None:
             response = HTTPResponse()
         self.responses.append(response)
-        self.transmitter.request(b"GET", uri, **headers)
+        self.transmitter.transmit_request(b"GET", target, **headers)
         return response
 
-    def head(self, uri, response=None, **headers):
+    def head(self, target, response=None, **headers):
         """ Make a HEAD request to the remote host.
         """
         if response is None:
             response = HTTPResponse()
         self.responses.append(response)
-        self.transmitter.request(b"HEAD", uri, **headers)
+        self.transmitter.transmit_request(b"HEAD", target, **headers)
         return response
 
-    def post(self, uri, body, response=None, **headers):
+    def post(self, target, body, response=None, **headers):
         """ Make a POST request to the remote host.
         """
         if response is None:
             response = HTTPResponse()
         self.responses.append(response)
-        self.transmitter.request(b"POST", uri, body, **headers)
+        self.transmitter.transmit_request(b"POST", target, body, **headers)
         return response
 
-    def put(self, uri, body, response=None, **headers):
+    def put(self, target, body, response=None, **headers):
         """ Make a PUT request to the remote host.
         """
         if response is None:
             response = HTTPResponse()
         self.responses.append(response)
-        self.transmitter.request(b"PUT", uri, body, **headers)
+        self.transmitter.transmit_request(b"PUT", target, body, **headers)
         return response
 
-    def patch(self, uri, body, response=None, **headers):
-        """ Make a PATCH request to the remote host.
-        """
-        if response is None:
-            response = HTTPResponse()
-        self.responses.append(response)
-        self.transmitter.request(b"PATCH", uri, body, **headers)
-        return response
-
-    def delete(self, uri, response=None, **headers):
+    def delete(self, target, response=None, **headers):
         """ Make a DELETE request to the remote host.
         """
         if response is None:
             response = HTTPResponse()
         self.responses.append(response)
-        self.transmitter.request(b"DELETE", uri, **headers)
+        self.transmitter.transmit_request(b"DELETE", target, **headers)
         return response
 
-    def trace(self, uri, response=None, **headers):
+    def connect(self, target, response=None, **headers):
+        """ Make a CONNECT request to the remote host.
+        """
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.transmit_request(b"CONNECT", target, **headers)
+        return response
+
+    def options(self, target=b"*", response=None, **headers):
+        """ Make an OPTIONS request to the remote host.
+        """
+        if response is None:
+            response = HTTPResponse()
+        self.responses.append(response)
+        self.transmitter.transmit_request(b"OPTIONS", target, **headers)
+        return response
+
+    def trace(self, target, response=None, **headers):
         """ Make a TRACE request to the remote host.
         """
         if response is None:
             response = HTTPResponse()
         self.responses.append(response)
-        self.transmitter.request(b"TRACE", uri, **headers)
+        self.transmitter.transmit_request(b"TRACE", target, **headers)
         return response
 
     def on_data(self, data):
