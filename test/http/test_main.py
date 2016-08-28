@@ -43,7 +43,7 @@ class HeadMethodTestCase(TestCase):
         out = BytesIO()
 
         # When
-        head("shortwave.http", "get", "http://shortwave.tech/hello", out=out)
+        head("shortwave.http", "head", "http://shortwave.tech/hello", out=out)
 
         # Then
         assert out.getvalue() == b""

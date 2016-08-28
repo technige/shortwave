@@ -28,7 +28,6 @@ from shortwave.watcher import watch
 class ResponseWriter(HTTPResponse):
 
     def __init__(self, out):
-        super(ResponseWriter, self).__init__()
         self.out = out
         try:
             fd = out.fileno()
@@ -40,7 +39,7 @@ class ResponseWriter(HTTPResponse):
                 os_write(fd, b)
         self.write = write
 
-    def on_content(self, data):
+    def on_data(self, data):
         self.write(data)
 
 
@@ -173,12 +172,18 @@ def delete(prog, method, *args, arg_encoding="UTF-8", out=stdout):
         http.close()
 
 
+get = safe_request
+head = safe_request
+
+
 def main():
     argv[0] = "shortwave.http"
     if len(argv) == 1 or argv[1] == "help":
         usage()
-    elif argv[1] in ("get", "head"):
-        safe_request(*argv, arg_encoding=stdin.encoding, out=stdout)
+    elif argv[1] == "get":
+        get(*argv, arg_encoding=stdin.encoding, out=stdout)
+    elif argv[1] == "head":
+        head(*argv, arg_encoding=stdin.encoding, out=stdout)
     elif argv[1] == "post":
         post(*argv, arg_encoding=stdin.encoding, out=stdout)
     elif argv[1] == "put":
