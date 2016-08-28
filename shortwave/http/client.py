@@ -224,9 +224,13 @@ class HTTP(Connection):
                     self.end(response)
 
     def on_chunk_size(self, response, data):
-        self.data_limit = response.chunk_size = int(data, 16)
         # TODO: parse chunk extensions <https://tools.ietf.org/html/rfc7230#section-4.1.1>
-        self.response_handler = self.on_chunk_data
+        self.data_limit = chunk_size = int(data, 16)
+        if chunk_size == 0:
+            self.data_limit = b"\r\n"
+            self.response_handler = self.on_final_chunk_trailer
+        else:
+            self.response_handler = self.on_chunk_data
 
     def on_chunk_data(self, response, data):
         if len(data) > 1024:
@@ -243,10 +247,11 @@ class HTTP(Connection):
 
     def on_chunk_trailer(self, response, data):
         # TODO: parse chunk trailer <https://tools.ietf.org/html/rfc7230#section-4.1.2>
-        if response.chunk_size == 0:
-            self.end(response)
-        else:
-            self.response_handler = self.on_chunk_size
+        self.response_handler = self.on_chunk_size
+
+    def on_final_chunk_trailer(self, response, data):
+        # TODO: parse chunk trailer <https://tools.ietf.org/html/rfc7230#section-4.1.2>
+        self.end(response)
 
     def on_fixed_length_data(self, response, data):
         if len(data) > 1024:
@@ -291,7 +296,6 @@ class HTTPResponse(object):
     status_code = None
     reason_phrase = None
     headers = None
-    chunk_size = None
     end = None
 
     def __new__(cls, *args, **kwargs):
@@ -308,6 +312,9 @@ class HTTPResponse(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
+    def __getitem__(self, name):
+        return self.headers[name]
+
     def on_status_line(self, http_version, status_code, reason_phrase):
         self.http_version = http_version
         self.status_code = status_code
@@ -319,6 +326,7 @@ class HTTPResponse(object):
         self.headers[name] = value
 
     def on_data(self, data):
+        # TODO: buffer raw data and coerce to typed content for certain content types
         self.on_content(data)
 
     def on_content(self, data):
