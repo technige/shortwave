@@ -22,7 +22,7 @@ from logging import getLogger
 from threading import Event
 
 from shortwave.compat import bstr
-from shortwave.messaging import SP, CRLF, HeaderDict, header_names
+from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
 from shortwave.transmission import Transmitter, Connection
 from shortwave.uri import parse_authority
@@ -74,7 +74,7 @@ class HTTPTransmitter(Transmitter):
 
     def __init__(self, socket, headers):
         super(HTTPTransmitter, self).__init__(socket)
-        self.headers = HeaderDict(headers)
+        self.headers = MessageHeaderDict(headers)
 
     def transmit(self, request):
         method = request.method
@@ -136,7 +136,7 @@ class HTTP(Connection):
         self.data_limit = b"\r\n"
         self.responses = deque()
         self.response_handler = self.on_status_line
-        self.response_headers = HeaderDict()
+        self.response_headers = MessageHeaderDict()
 
     def exchange(self, request, response):
         self.responses.append(response)
@@ -325,7 +325,7 @@ class HTTPResponse(object):
 
     def on_header_line(self, name, value):
         if self.headers is None:
-            self.headers = HeaderDict()
+            self.headers = MessageHeaderDict()
         self.headers[name] = value
 
     def on_body_data(self, data):

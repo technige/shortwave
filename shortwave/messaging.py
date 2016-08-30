@@ -60,7 +60,7 @@ header_names = {
 }
 
 
-class HeaderDict(dict):
+class MessageHeaderDict(dict):
 
     @classmethod
     def from_bytes(cls, b):
@@ -68,7 +68,7 @@ class HeaderDict(dict):
         pass
 
     def __init__(self, iterable=None, **kwargs):
-        super(HeaderDict, self).__init__()
+        super(MessageHeaderDict, self).__init__()
         self.update(iterable, **kwargs)
 
     def __repr__(self):
@@ -76,19 +76,19 @@ class HeaderDict(dict):
 
     def __getitem__(self, name):
         matchable_name, _ = header_name(name)
-        _, value = super(HeaderDict, self).__getitem__(matchable_name)
+        _, value = super(MessageHeaderDict, self).__getitem__(matchable_name)
         return value
 
     def __setitem__(self, name, value):
         matchable_name, canonical_name = header_name(name)
         if isinstance(value, bytes):
-            super(HeaderDict, self).__setitem__(matchable_name, (canonical_name, value))
+            super(MessageHeaderDict, self).__setitem__(matchable_name, (canonical_name, value))
         else:
-            super(HeaderDict, self).__setitem__(matchable_name, (canonical_name, bstr(value)))
+            super(MessageHeaderDict, self).__setitem__(matchable_name, (canonical_name, bstr(value)))
 
     def __delitem__(self, name):
         matchable_name, _ = header_name(name)
-        super(HeaderDict, self).__delitem__(matchable_name)
+        super(MessageHeaderDict, self).__delitem__(matchable_name)
 
     def copy(self):
         return self.__class__(self)
@@ -96,7 +96,7 @@ class HeaderDict(dict):
     def get(self, name, default=None):
         matchable_name, _ = header_name(name)
         try:
-            _, value = super(HeaderDict, self).__getitem__(matchable_name)
+            _, value = super(MessageHeaderDict, self).__getitem__(matchable_name)
         except KeyError:
             return default
         else:
@@ -114,13 +114,13 @@ class HeaderDict(dict):
             self[name] = kwargs[name]
 
     def items(self):
-        return list(super(HeaderDict, self).values())
+        return list(super(MessageHeaderDict, self).values())
 
     def keys(self):
-        return list(canonical_name for canonical_name, _ in super(HeaderDict, self).values())
+        return list(canonical_name for canonical_name, _ in super(MessageHeaderDict, self).values())
 
     def values(self):
-        return list(value for _, value in super(HeaderDict, self).values())
+        return list(value for _, value in super(MessageHeaderDict, self).values())
 
     def to_bytes(self):
         b = []
