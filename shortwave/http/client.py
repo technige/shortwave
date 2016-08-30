@@ -136,7 +136,6 @@ class HTTP(Connection):
         self.data_limit = b"\r\n"
         self.responses = deque()
         self.response_handler = self.on_status_line
-        self.response_headers = MessageHeaderDict()
 
     def exchange(self, request, response):
         self.responses.append(response)
@@ -196,43 +195,37 @@ class HTTP(Connection):
         more = self.response_handler(response, data)
         if not more:
             log.debug("Marking %r as complete", response)
-            try:
-                response.end.set()
-            finally:
-                self.responses.popleft()
-                headers = self.response_headers
-                connection = headers.get(b"connection", connection_default[response.http_version])
-                if connection.lower() == b"close":
-                    self.close()
-                else:
-                    self.data_limit = b"\r\n"
-                    self.response_handler = self.on_status_line
-                    headers.clear()
+            response.end.set()
+            self.responses.popleft()
+            connection = response.headers.get(b"connection",
+                                              connection_default[response.http_version])
+            if connection.lower() == b"close":
+                self.close()
+            else:
+                self.data_limit = b"\r\n"
+                self.response_handler = self.on_status_line
 
     def on_status_line(self, response, data):
         log.info("R[%d]: %s", self.fd, data.decode())
         http_version, status_code, reason_phrase = data.split(SP, 2)
-        try:
-            response.on_status_line(bytes(http_version), int(status_code), bytes(reason_phrase))
-        finally:
-            self.response_handler = self.on_header_line
-            return True
+        response.http_version = bytes(http_version)
+        response.status_code = int(status_code)
+        response.reason_phrase = bytes(reason_phrase)
+        response.headers = MessageHeaderDict()
+        self.response_handler = self.on_header_line
+        return True
 
     def on_header_line(self, response, data):
         log.info("R[%d]: %s", self.fd, data.decode())
         if data:
             name, _, value = data.partition(b":")
-            value = value.strip()
-            try:
-                response.on_header_line(name, value)
-            finally:
-                self.response_headers[name] = value
-                return True
-        if self.response_headers.get("transfer-encoding", b"").lower() == b"chunked":
+            response.headers[name] = value.strip()
+            return True
+        if response.headers.get("transfer-encoding", b"").lower() == b"chunked":
             self.data_limit = b"\r\n"
             self.response_handler = self.on_chunk_size
             return True
-        self.data_limit = int(self.response_headers.get("content-length", 0))
+        self.data_limit = int(response.headers.get("content-length", 0))
         if self.data_limit:
             self.response_handler = self.on_body_data
             return True
@@ -317,16 +310,6 @@ class HTTPResponse(object):
 
     def __getitem__(self, name):
         return self.headers[name]
-
-    def on_status_line(self, http_version, status_code, reason_phrase):
-        self.http_version = http_version
-        self.status_code = status_code
-        self.reason_phrase = reason_phrase
-
-    def on_header_line(self, name, value):
-        if self.headers is None:
-            self.headers = MessageHeaderDict()
-        self.headers[name] = value
 
     def on_body_data(self, data):
         # TODO: buffer raw data and coerce to typed content for certain content types
