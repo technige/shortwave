@@ -21,10 +21,10 @@ from json import dumps as json_dumps
 from logging import getLogger
 from threading import Event
 
-from shortwave import Connection, Transmitter
 from shortwave.compat import bstr
 from shortwave.messaging import SP, CRLF, HeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
+from shortwave.transmission import Transmitter, Connection
 from shortwave.uri import parse_authority
 
 HTTP_VERSION = b"HTTP/1.1"
