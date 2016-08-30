@@ -20,7 +20,7 @@ LINUX = True
 
 if LINUX:
     from .linux import \
-        LinuxTransmitter as Transmitter, \
+        LinuxCorkingTransmitter as Transmitter, \
         LinuxEventPollReceiver as Receiver, \
         LinuxTransceiver as Transceiver
 else:

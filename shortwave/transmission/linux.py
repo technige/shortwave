@@ -28,7 +28,7 @@ log = getLogger("shortwave.transmission")
 default_buffer_size = 524288
 
 
-class LinuxTransmitter(BaseTransmitter):
+class LinuxCorkingTransmitter(BaseTransmitter):
     """ A Transmitter handles the outgoing half of a network conversation.
     Transmission is synchronous and will block until all data has been
     sent.
@@ -37,7 +37,7 @@ class LinuxTransmitter(BaseTransmitter):
     def transmit(self, *data):
         set_socket_option = self.socket.setsockopt
         set_socket_option(IPPROTO_TCP, TCP_CORK, 1)
-        super(LinuxTransmitter, self).transmit(*data)
+        super(LinuxCorkingTransmitter, self).transmit(*data)
         set_socket_option(IPPROTO_TCP, TCP_CORK, 0)
 
 
@@ -112,5 +112,5 @@ class LinuxTransceiver(BaseTransceiver):
     Transmitter with a Receiver.
     """
 
-    Tx = LinuxTransmitter
+    Tx = LinuxCorkingTransmitter
     Rx = LinuxEventPollReceiver
