@@ -192,7 +192,22 @@ class HTTP(Connection):
                              response or HTTPResponse())
 
     def on_data(self, data):
-        self.response_handler(self.responses[0], data)
+        response = self.responses[0]
+        more = self.response_handler(response, data)
+        if not more:
+            log.debug("Marking %r as complete", response)
+            try:
+                response.end.set()
+            finally:
+                self.responses.popleft()
+                headers = self.response_headers
+                connection = headers.get(b"connection", connection_default[response.http_version])
+                if connection.lower() == b"close":
+                    self.close()
+                else:
+                    self.data_limit = b"\r\n"
+                    self.response_handler = self.on_status_line
+                    headers.clear()
 
     def on_status_line(self, response, data):
         log.info("R[%d]: %s", self.fd, data.decode())
@@ -200,9 +215,10 @@ class HTTP(Connection):
         try:
             response.on_status_line(bytes(http_version), int(status_code), bytes(reason_phrase))
         finally:
-            self.response_handler = self.on_headers
+            self.response_handler = self.on_header_line
+            return True
 
-    def on_headers(self, response, data):
+    def on_header_line(self, response, data):
         log.info("R[%d]: %s", self.fd, data.decode())
         if data:
             name, _, value = data.partition(b":")
@@ -211,17 +227,28 @@ class HTTP(Connection):
                 response.on_header_line(name, value)
             finally:
                 self.response_headers[name] = value
+                return True
+        if self.response_headers.get("transfer-encoding", b"").lower() == b"chunked":
+            self.data_limit = b"\r\n"
+            self.response_handler = self.on_chunk_size
+            return True
+        self.data_limit = int(self.response_headers.get("content-length", 0))
+        if self.data_limit:
+            self.response_handler = self.on_body_data
+            return True
+        # TODO determine whether there is no content or whether content ends on close
+        return False
+
+    def on_body_data(self, response, data):
+        if len(data) > 1024:
+            log.info("R[%d]: %d bytes", self.fd, len(data))
         else:
-            if self.response_headers.get("transfer-encoding", b"").lower() == b"chunked":
-                self.data_limit = b"\r\n"
-                self.response_handler = self.on_chunk_size
-            else:
-                self.data_limit = int(self.response_headers.get("content-length", 0))
-                if self.data_limit:
-                    self.response_handler = self.on_fixed_length_data
-                else:
-                    # TODO determine whether there is no content or whether content ends on close
-                    self.end(response)
+            log.info("R[%d]: %r", self.fd, bytes(data))
+        try:
+            response.on_body_data(data)
+        finally:
+            self.data_limit -= len(data)
+            return bool(self.data_limit)
 
     def on_chunk_size(self, response, data):
         # TODO: parse chunk extensions <https://tools.ietf.org/html/rfc7230#section-4.1.1>
@@ -231,6 +258,7 @@ class HTTP(Connection):
             self.response_handler = self.on_final_chunk_trailer
         else:
             self.response_handler = self.on_chunk_data
+        return True
 
     def on_chunk_data(self, response, data):
         if len(data) > 1024:
@@ -238,47 +266,22 @@ class HTTP(Connection):
         else:
             log.info("R[%d]: %r", self.fd, bytes(data))
         try:
-            response.on_data(data)
+            response.on_body_data(data)
         finally:
             self.data_limit -= len(data)
             if self.data_limit == 0:
                 self.data_limit = b"\r\n"
                 self.response_handler = self.on_chunk_trailer
+            return True
 
     def on_chunk_trailer(self, response, data):
         # TODO: parse chunk trailer <https://tools.ietf.org/html/rfc7230#section-4.1.2>
         self.response_handler = self.on_chunk_size
+        return True
 
     def on_final_chunk_trailer(self, response, data):
         # TODO: parse chunk trailer <https://tools.ietf.org/html/rfc7230#section-4.1.2>
-        self.end(response)
-
-    def on_fixed_length_data(self, response, data):
-        if len(data) > 1024:
-            log.info("R[%d]: %d bytes", self.fd, len(data))
-        else:
-            log.info("R[%d]: %r", self.fd, bytes(data))
-        try:
-            response.on_data(data)
-        finally:
-            self.data_limit -= len(data)
-            if self.data_limit == 0:
-                self.end(response)
-
-    def end(self, response):
-        log.debug("Marking %r as complete", response)
-        try:
-            response.end.set()
-        finally:
-            self.responses.popleft()
-            headers = self.response_headers
-            connection = headers.get(b"connection", connection_default[response.http_version])
-            if connection.lower() == b"close":
-                self.close()
-            else:
-                self.data_limit = b"\r\n"
-                self.response_handler = self.on_status_line
-                headers.clear()
+        return False
 
 
 class HTTPRequest(object):
@@ -325,7 +328,7 @@ class HTTPResponse(object):
             self.headers = HeaderDict()
         self.headers[name] = value
 
-    def on_data(self, data):
+    def on_body_data(self, data):
         # TODO: buffer raw data and coerce to typed content for certain content types
         self.on_content(data)
 

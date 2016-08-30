@@ -39,7 +39,7 @@ class ResponseWriter(HTTPResponse):
                 os_write(fd, b)
         self.write = write
 
-    def on_data(self, data):
+    def on_body_data(self, data):
         self.write(data)
 
 
