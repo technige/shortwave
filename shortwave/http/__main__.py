@@ -20,7 +20,7 @@ from logging import INFO, DEBUG
 from os import write as os_write
 from sys import argv, stdin, stdout
 
-from shortwave.http import HTTP, HTTPResponse
+from shortwave.http import HTTP, HTTPResponse, HTTPRequest
 from shortwave.uri import parse_uri, build_uri
 from shortwave.watcher import watch
 
@@ -69,7 +69,9 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     else:
         receiver = None
 
+    connections = []
     responses = []
+    http = None
     try:
         for uri in parsed.uri:
             scheme, authority, path, query, fragment = parse_uri(uri.encode(arg_encoding))
@@ -77,16 +79,17 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
                 raise ValueError("Non-HTTP URI: %r" % uri)
             if authority:
                 http = HTTP(authority, receiver, rx_buffer_size=parsed.rx_buffer_size)
-            else:
-                http = responses[-1][0]
+                connections.append(http)
             target = build_uri(path=path, query=query, fragment=fragment)
             response = ResponseWriter(out)
-            responses.append((http, response))
-            getattr(http, method)(target, response)
+            responses.append(response)
+            http.append(getattr(HTTPRequest, method)(target), response)
     finally:
-        for _, response in responses:
+        for http in connections:
+            http.transmit()
+        for response in responses:
             response.end.wait()
-        for http, _ in responses:
+        for http in connections:
             http.close()
         if receiver:
             receiver.stop()
@@ -114,7 +117,8 @@ def post(prog, method, *args, arg_encoding="UTF-8", out=stdout):
         headers["content_type"] = b"application/json"
     try:
         response = ResponseWriter(out)
-        http.post(target, parsed.body, response, **headers)
+        http.append(HTTPRequest.post(target, parsed.body, **headers), response)
+        http.transmit()
         response.end.wait()
     finally:
         http.close()
@@ -142,7 +146,8 @@ def put(prog, method, *args, arg_encoding="UTF-8", out=stdout):
         headers["content_type"] = b"application/json"
     try:
         response = ResponseWriter(out)
-        http.put(target, parsed.body, response, **headers)
+        http.append(HTTPRequest.put(target, parsed.body, **headers), response)
+        http.transmit()
         response.end.wait()
     finally:
         http.close()
@@ -166,7 +171,8 @@ def delete(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     headers = {}
     try:
         response = ResponseWriter(out)
-        http.delete(target, response, **headers)
+        http.append(HTTPRequest.delete(target, **headers), response)
+        http.transmit()
         response.end.wait()
     finally:
         http.close()

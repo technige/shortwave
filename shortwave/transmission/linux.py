@@ -35,10 +35,9 @@ class LinuxCorkingTransmitter(BaseTransmitter):
     """
 
     def transmit(self, *data):
-        set_socket_option = self.socket.setsockopt
-        set_socket_option(IPPROTO_TCP, TCP_CORK, 1)
+        self.socket.setsockopt(IPPROTO_TCP, TCP_CORK, 1)
         super(LinuxCorkingTransmitter, self).transmit(*data)
-        set_socket_option(IPPROTO_TCP, TCP_CORK, 0)
+        self.socket.setsockopt(IPPROTO_TCP, TCP_CORK, 0)
 
 
 class LinuxEventPollReceiver(BaseReceiver):
