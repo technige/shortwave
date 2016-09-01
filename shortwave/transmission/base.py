@@ -21,7 +21,7 @@ from socket import socket as _socket, error as socket_error, \
     AF_INET, SOCK_STREAM, IPPROTO_TCP, TCP_NODELAY, SHUT_RD, SHUT_WR
 from threading import Thread
 
-from shortwave.concurrency import sync
+from shortwave.concurrency import synchronized
 
 log = getLogger("shortwave.transmission")
 
@@ -69,7 +69,7 @@ class BaseReceiver(Thread):
         # TODO: select-based default receiver
         raise NotImplementedError("No receiver implementation is available for this platform")
 
-    @sync
+    @synchronized
     def stop(self):
         if not self._stopped:
             log.debug("Stopping %r", self)
@@ -123,7 +123,7 @@ class BaseTransceiver(object):
     def stopped(self):
         return not self.transmitter and not self.receiver
 
-    @sync
+    @synchronized
     def stop_tx(self):
         if self.transmitter:
             log.info("T[%d]: STOP", self.fd)
@@ -137,7 +137,7 @@ class BaseTransceiver(object):
                 if self.stopped() and not self.close.locked():
                     self.close()
 
-    @sync
+    @synchronized
     def stop_rx(self):
         if self.receiver:
             try:
@@ -154,7 +154,7 @@ class BaseTransceiver(object):
                     if self.stopped() and not self.close.locked():
                         self.close()
 
-    @sync
+    @synchronized
     def close(self):
         if self.socket:
             if not self.stop_tx.locked():
@@ -163,7 +163,7 @@ class BaseTransceiver(object):
                 self.stop_rx()
             try:
                 self.socket.close()
-            except socket_error as error:
+            except socket_error:
                 pass
             finally:
                 self.socket = None

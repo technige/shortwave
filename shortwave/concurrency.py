@@ -18,8 +18,8 @@
 from threading import Lock
 
 
-def sync(f):
-    """ Function synchronisation decorator with lock check method. This
+def synchronized(f):
+    """ Function synchronization decorator with lock check method. This
     method ensures synchronous access to this function, much like the
     Java `synchronized` keyword. Additionally though, calling `.locked()`
     on any decorated function will return a boolean indicating whether a

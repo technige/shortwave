@@ -70,7 +70,6 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
         receiver = None
 
     connections = []
-    responses = []
     http = None
     try:
         for uri in parsed.uri:
@@ -81,14 +80,8 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
                 http = HTTP(authority, receiver, rx_buffer_size=parsed.rx_buffer_size)
                 connections.append(http)
             target = build_uri(path=path, query=query, fragment=fragment)
-            response = ResponseWriter(out)
-            responses.append(response)
-            http.append(getattr(HTTPRequest, method)(target), response)
+            http.append(getattr(HTTPRequest, method)(target), ResponseWriter(out))
     finally:
-        for http in connections:
-            http.transmit()
-        for response in responses:
-            response.end.wait()
         for http in connections:
             http.close()
         if receiver:
@@ -116,10 +109,7 @@ def post(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.json:
         headers["content_type"] = b"application/json"
     try:
-        response = ResponseWriter(out)
-        http.append(HTTPRequest.post(target, parsed.body, **headers), response)
-        http.transmit()
-        response.end.wait()
+        http.append(HTTPRequest.post(target, parsed.body, **headers), ResponseWriter(out))
     finally:
         http.close()
 
@@ -145,10 +135,7 @@ def put(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.json:
         headers["content_type"] = b"application/json"
     try:
-        response = ResponseWriter(out)
-        http.append(HTTPRequest.put(target, parsed.body, **headers), response)
-        http.transmit()
-        response.end.wait()
+        http.append(HTTPRequest.put(target, parsed.body, **headers), ResponseWriter(out))
     finally:
         http.close()
 
@@ -170,10 +157,7 @@ def delete(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     target = build_uri(path=path, query=query, fragment=fragment)
     headers = {}
     try:
-        response = ResponseWriter(out)
-        http.append(HTTPRequest.delete(target, **headers), response)
-        http.transmit()
-        response.end.wait()
+        http.append(HTTPRequest.delete(target, **headers), ResponseWriter(out))
     finally:
         http.close()
 

@@ -22,6 +22,7 @@ from logging import getLogger
 from threading import Event
 
 from shortwave.compat import bstr
+from shortwave.concurrency import synchronized
 from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
 from shortwave.transmission import Transmitter, Connection
@@ -171,8 +172,19 @@ class HTTP(Connection):
         self.responses.append(response)
 
     def transmit(self):
-        self.transmitter.transmit(*self.requests)
-        self.requests.clear()
+        if self.requests:
+            self.transmitter.transmit(*self.requests)
+            self.requests.clear()
+
+    def sync(self):
+        self.transmit()
+        while self.responses:
+            self.responses[0].end.wait()
+
+    @synchronized
+    def close(self):
+        self.sync()
+        super(HTTP, self).close()
 
     def on_data(self, data):
         response = self.responses[0]
