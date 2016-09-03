@@ -20,7 +20,7 @@ from logging import INFO, DEBUG
 from os import write as os_write
 from sys import argv, stdin, stdout
 
-from shortwave.http import HTTP, HTTPResponse, HTTPRequest
+from shortwave.http import HTTP, HTTPResponse, HTTPRequest, basic_auth
 from shortwave.uri import parse_uri, build_uri
 from shortwave.watcher import watch
 
@@ -54,7 +54,9 @@ def usage():
 def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri [uri ...]".format(method))
     parser.add_argument("-1", "--single-receiver", action="store_true")
+    parser.add_argument("-p", "--password")
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
+    parser.add_argument("-u", "--user")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--very-verbose", action="store_true")
     parser.add_argument("uri", nargs="+")
@@ -69,6 +71,9 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     else:
         receiver = None
 
+    headers = {}
+    if parsed.user or parsed.password:
+        headers[b"Authorization"] = basic_auth(parsed.user, parsed.password)
     connections = []
     http = None
     try:
@@ -80,7 +85,7 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
                 http = HTTP(authority, receiver, rx_buffer_size=parsed.rx_buffer_size)
                 connections.append(http)
             target = build_uri(path=path, query=query, fragment=fragment)
-            http.append(getattr(HTTPRequest, method)(target), ResponseWriter(out))
+            http.append(getattr(HTTPRequest, method)(target, **headers), ResponseWriter(out))
     finally:
         for http in connections:
             http.close()

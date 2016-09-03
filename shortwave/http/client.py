@@ -25,7 +25,7 @@ from shortwave.compat import bstr
 from shortwave.concurrency import synchronized
 from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
-from shortwave.transmission import Transmitter, Connection
+from shortwave.transmission import Connection
 from shortwave.uri import parse_authority
 
 HTTP_VERSION = b"HTTP/1.1"
@@ -71,29 +71,47 @@ header_names.update({
 })
 
 
-class HTTPTransmitter(Transmitter):
+class HTTP(Connection):
 
-    def __init__(self, socket, headers):
-        super(HTTPTransmitter, self).__init__(socket)
-        self.headers = MessageHeaderDict(headers)
+    def __init__(self, authority, receiver=None, rx_buffer_size=None, **headers):
+        user_info, host, port = parse_authority(authority)
+        if user_info:
+            headers[b"Authorization"] = basic_auth(user_info)
+        if port:
+            headers[b"Host"] = host + b":" + bstr(port)
+        else:
+            headers[b"Host"] = host
+        super(HTTP, self).__init__((host, port or HTTP_PORT), receiver, rx_buffer_size, headers)
+        self.data_limit = b"\r\n"
+        self.requests = deque()
+        self.request_headers = MessageHeaderDict(headers)
+        self.responses = deque()
+        self.response_handler = self.on_status_line
 
-    def transmit(self, *requests):
+    def append(self, request, response):
+        self.requests.append(request)
+        self.responses.append(response)
+
+    def transmit(self):
 
         data = []
         append = data.append
 
-        def transmit():
-            log_data = b"".join(data).decode()
-            for line in log_data.splitlines():
-                log.info("T[%d]: %s", self.fd, line)
-            super(HTTPTransmitter, self).transmit(*data)
-            data[:] = []
+        def transmit_():
+            if data:
+                log_data = b"".join(data).decode()
+                for line in log_data.splitlines():
+                    log.info("T[%d]: %s", self.fd, line)
+                self.transmitter.transmit(*data)
+                data[:] = []
 
-        for request in requests:
+        while self.requests:
+            request = self.requests.popleft()
+
             method = request.method
-            target = request.target
+            target = request.target  # TODO: if this is a full URI, parse it and use the host for the Host header
             body = request.body
-            headers = self.headers.copy()
+            headers = self.request_headers.copy()
 
             assert isinstance(method, bytes)
             assert isinstance(target, bytes)
@@ -115,7 +133,7 @@ class HTTPTransmitter(Transmitter):
                 headers.update(request.headers)
                 append(headers.to_bytes())
                 append(CRLF)
-                transmit()
+                transmit_()
                 for chunk in body():
                     if not isinstance(chunk, bytes):
                         chunk = bstr(chunk)
@@ -125,11 +143,11 @@ class HTTPTransmitter(Transmitter):
                         append(CRLF)
                         append(chunk)
                         append(CRLF)
-                        transmit()
+                        transmit_()
                 append(b"0")
                 append(CRLF)
                 append(CRLF)
-                transmit()
+                transmit_()
 
             else:
                 # Otherwise, we'll just send fixed-length data
@@ -147,34 +165,7 @@ class HTTPTransmitter(Transmitter):
                 append(CRLF)
                 append(body)
 
-        transmit()
-
-
-class HTTP(Connection):
-    Tx = HTTPTransmitter
-
-    def __init__(self, authority, receiver=None, rx_buffer_size=None, **headers):
-        user_info, host, port = parse_authority(authority)
-        if user_info:
-            headers[b"Authorization"] = basic_auth(user_info)
-        if port:
-            headers[b"Host"] = host + b":" + bstr(port)
-        else:
-            headers[b"Host"] = host
-        super(HTTP, self).__init__((host, port or HTTP_PORT), receiver, rx_buffer_size, headers)
-        self.data_limit = b"\r\n"
-        self.requests = deque()
-        self.responses = deque()
-        self.response_handler = self.on_status_line
-
-    def append(self, request, response):
-        self.requests.append(request)
-        self.responses.append(response)
-
-    def transmit(self):
-        if self.requests:
-            self.transmitter.transmit(*self.requests)
-            self.requests.clear()
+        transmit_()
 
     def sync(self):
         self.transmit()
