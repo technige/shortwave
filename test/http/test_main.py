@@ -33,6 +33,18 @@ class GetMethodTestCase(TestCase):
         # Then
         assert out.getvalue() == b"hello, world\r\n"
 
+    def test_multiple_requests_for_same_authority(self):
+        from shortwave.http.__main__ import get
+
+        # Given
+        out = BytesIO()
+
+        # When
+        get("shortwave.http", "get", "http://shortwave.tech/hello", "/hello", out=out)
+
+        # Then
+        assert out.getvalue() == b"hello, world\r\nhello, world\r\n"
+
 
 class HeadMethodTestCase(TestCase):
 
@@ -47,3 +59,94 @@ class HeadMethodTestCase(TestCase):
 
         # Then
         assert out.getvalue() == b""
+
+
+class RestTestCase(TestCase):
+
+    def test_get(self):
+        from shortwave.http.__main__ import get
+        from json import loads
+
+        # Given
+        out = BytesIO()
+
+        # When
+        get("shortwave.http", "get", "http://shortwave.tech/rest/thing/a", out=out)
+
+        # Then
+        data = loads(out.getvalue().decode("utf-8"))
+        del data["request"]["time"]
+        del data["thing"]["size"]
+        assert data == {
+            "request": {
+                "method": "GET",
+                "collection": "thing",
+                "element": "a",
+            },
+            "thing": {
+                "name": "a",
+            },
+        }
+
+    def test_post(self):
+        from shortwave.http.__main__ import post
+        from json import loads
+
+        # Given
+        out = BytesIO()
+
+        # When
+        post("shortwave.http", "post", "http://shortwave.tech/rest/thing/", "test", out=out)
+
+        # Then
+        data = loads(out.getvalue().decode("utf-8"))
+        del data["request"]["time"]
+        print(data)
+        assert data == {
+            "request": {
+                "method": "POST",
+                "collection": "thing",
+            },
+        }
+
+    def test_put(self):
+        from shortwave.http.__main__ import put
+        from json import loads
+
+        # Given
+        out = BytesIO()
+
+        # When
+        put("shortwave.http", "put", "http://shortwave.tech/rest/thing/a", "test", out=out)
+
+        # Then
+        data = loads(out.getvalue().decode("utf-8"))
+        del data["request"]["time"]
+        assert data == {
+            "request": {
+                "method": "PUT",
+                "collection": "thing",
+                "element": "a",
+            },
+        }
+
+    def test_delete(self):
+        from shortwave.http.__main__ import delete
+        from json import loads
+
+        # Given
+        out = BytesIO()
+
+        # When
+        delete("shortwave.http", "delete", "http://shortwave.tech/rest/thing/a", out=out)
+
+        # Then
+        data = loads(out.getvalue().decode("utf-8"))
+        del data["request"]["time"]
+        assert data == {
+            "request": {
+                "method": "DELETE",
+                "collection": "thing",
+                "element": "a",
+            },
+        }

@@ -71,36 +71,53 @@ def percent_decode(data):
     return unquote(xstr(data))
 
 
-def parse_uri(uri):
+def parse_uri(uri, parts=5):
+    """ Parse a URI, returning anything between two and five component
+    parts. By default, all five parts are separated out: scheme,
+    authority, path, query and fragment. If four parts are requested,
+    the path and query remain combined; if three parts are requested,
+    the fragment also remains attached; if only two parts are requested,
+    just the scheme is separated.
+    """
+    if uri is None:
+        return [None] * parts
+
+    assert isinstance(uri, bytes)
+    parts = int(parts)
+    if not 2 <= parts <= 5:
+        raise ValueError("Can only parse URI into two, three, four or five component parts")
+
     scheme = auth = path = query = fragment = None
 
-    if uri is not None:
+    # Scheme
+    q = uri.find(b":")
+    if q == -1:
+        start = 0
+    elif scheme_pattern.match(uri, 0, q):
+        scheme = uri[:q]
+        start = q + 1
+    else:
+        start = 0
+    end = len(uri)
 
-        assert isinstance(uri, bytes)
+    if parts == 2:
+        return scheme, uri[start:end]
 
-        # Scheme
-        q = uri.find(b":")
-        if q == -1:
-            start = 0
-        elif scheme_pattern.match(uri, 0, q):
-            scheme = uri[:q]
-            start = q + 1
-        else:
-            start = 0
-        end = len(uri)
-
+    if parts >= 4:
         # Fragment
         q = uri.find(b"#", start)
         if q != -1:
             fragment = uri[(q + 1):]
             end = q
 
+    if parts >= 5:
         # Query
         q = uri.find(b"?", start)
         if start <= q < end:
             query = uri[(q + 1):end]
             end = q
 
+    if parts >= 3:
         # Authority and path
         p = start + 2
         if uri[start:p] == b"//":
@@ -114,7 +131,12 @@ def parse_uri(uri):
         else:
             path = uri[start:end]
 
-    return scheme, auth, path, query, fragment
+    if parts == 3:
+        return scheme, auth, path
+    elif parts == 4:
+        return scheme, auth, path, fragment
+    else:
+        return scheme, auth, path, query, fragment
 
 
 def build_uri(scheme=None, authority=None, path=None, query=None, fragment=None, **parts):

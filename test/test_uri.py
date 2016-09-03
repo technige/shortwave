@@ -193,14 +193,55 @@ class ParseURITestCase(TestCase):
         assert fragment is None
 
     def test_can_parse_full_uri(self):
-        scheme, authority, path, query, fragment = parse_uri(b"foo://bob@somewhere@example.com:8042"
-                                                             b"/over/there?name=ferret#nose")
+        uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
+        scheme, authority, path, query, fragment = parse_uri(uri)
         assert scheme == b"foo"
         assert authority == b"bob@somewhere@example.com:8042"
         assert path == b"/over/there"
         assert query == b"name=ferret"
         assert fragment == b"nose"
-        
+
+    def test_cannot_parse_into_6_parts(self):
+        uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
+        with self.assertRaises(ValueError):
+            parse_uri(uri, 6)
+
+    def test_can_parse_into_5_parts(self):
+        uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
+        scheme, authority, path, query, fragment = parse_uri(uri, 5)
+        assert scheme == b"foo"
+        assert authority == b"bob@somewhere@example.com:8042"
+        assert path == b"/over/there"
+        assert query == b"name=ferret"
+        assert fragment == b"nose"
+
+    def test_can_parse_into_4_parts(self):
+        uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
+        scheme, authority, path_query, fragment = parse_uri(uri, 4)
+        assert scheme == b"foo"
+        assert authority == b"bob@somewhere@example.com:8042"
+        assert path_query == b"/over/there?name=ferret"
+        assert fragment == b"nose"
+
+    def test_can_parse_into_3_parts(self):
+        uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
+        scheme, authority, path_query_fragment = parse_uri(uri, 3)
+        assert scheme == b"foo"
+        assert authority == b"bob@somewhere@example.com:8042"
+        assert path_query_fragment == b"/over/there?name=ferret#nose"
+
+    def test_can_parse_into_2_parts(self):
+        uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
+        scheme, scheme_specific_part = parse_uri(uri, 2)
+        assert scheme == b"foo"
+        assert scheme_specific_part == b"//bob@somewhere@example.com:8042" \
+                                       b"/over/there?name=ferret#nose"
+
+    def test_cannot_parse_into_1_part(self):
+        uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
+        with self.assertRaises(ValueError):
+            parse_uri(uri, 1)
+
 
 class BuildURITestCase(TestCase):
     """

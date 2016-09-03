@@ -78,13 +78,12 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     http = None
     try:
         for uri in parsed.uri:
-            scheme, authority, path, query, fragment = parse_uri(uri.encode(arg_encoding))
+            scheme, authority, target = parse_uri(uri.encode(arg_encoding), 3)
             if scheme and scheme != b"http":
                 raise ValueError("Non-HTTP URI: %r" % uri)
             if authority:
                 http = HTTP(authority, receiver, rx_buffer_size=parsed.rx_buffer_size)
                 connections.append(http)
-            target = build_uri(path=path, query=query, fragment=fragment)
             http.append(getattr(HTTPRequest, method)(target, **headers), ResponseWriter(out))
     finally:
         for http in connections:
@@ -107,9 +106,8 @@ def post(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(arg_encoding))
+    scheme, authority, target = parse_uri(parsed.uri.encode(arg_encoding), 3)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
-    target = build_uri(path=path, query=query, fragment=fragment)
     headers = {}
     if parsed.json:
         headers["content_type"] = b"application/json"
@@ -133,9 +131,8 @@ def put(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(arg_encoding))
+    scheme, authority, target = parse_uri(parsed.uri.encode(arg_encoding), 3)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
-    target = build_uri(path=path, query=query, fragment=fragment)
     headers = {}
     if parsed.json:
         headers["content_type"] = b"application/json"
@@ -157,9 +154,8 @@ def delete(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, path, query, fragment = parse_uri(parsed.uri.encode(arg_encoding))
+    scheme, authority, target = parse_uri(parsed.uri.encode(arg_encoding), 3)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
-    target = build_uri(path=path, query=query, fragment=fragment)
     headers = {}
     try:
         http.append(HTTPRequest.delete(target, **headers), ResponseWriter(out))
