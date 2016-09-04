@@ -15,5 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ECHO_PORT = 7
-HTTP_PORT = 80
+from __future__ import print_function
+
+from shortwave.numbers import ECHO_PORT
+from shortwave.transmission import Connection
+
+
+class Echo(Connection):
+
+    def __init__(self, host, port=None, on_receive=print):
+        super(Echo, self).__init__((host, port or ECHO_PORT))
+        self.on_receive = on_receive

@@ -15,5 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ECHO_PORT = 7
-HTTP_PORT = 80
+from shortwave.transmission import Connection
+
+
+class EchoServer(Connection):
+
+    pass

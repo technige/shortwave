@@ -114,7 +114,7 @@ class HTTP(Connection):
             request = self.requests.popleft()
 
             method = request.method
-            target = request.target  # TODO: if this is a full URI, parse it and use the host for the Host header
+            target = request.target
             body = request.body
             headers = self.request_headers.copy()
 
