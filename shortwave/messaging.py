@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections import MutableMapping
+
 from shortwave.compat import bstr, xstr, SPACE
 
 
@@ -60,67 +62,57 @@ header_names = {
 }
 
 
-class MessageHeaderDict(dict):
+class MessageHeaderDict(MutableMapping):
 
-    @classmethod
-    def from_bytes(cls, b):
-        # TODO
-        pass
+    # @classmethod
+    # def from_bytes(cls, b):
+    #     # TODO
+    #     pass
 
     def __init__(self, iterable=None, **kwargs):
-        super(MessageHeaderDict, self).__init__()
-        self.update(iterable, **kwargs)
+        self.__fields = {}
+        self.update(iterable or (), **kwargs)
 
     def __repr__(self):
         return xstr(self.to_bytes())
 
+    def __len__(self):
+        return len(self.__fields)
+
+    def __contains__(self, name):
+        matchable_name, _ = header_name(name)
+        return matchable_name in self.__fields
+
     def __getitem__(self, name):
         matchable_name, _ = header_name(name)
-        _, value = super(MessageHeaderDict, self).__getitem__(matchable_name)
+        _, value = self.__fields[matchable_name]
         return value
 
     def __setitem__(self, name, value):
         matchable_name, canonical_name = header_name(name)
         if isinstance(value, bytes):
-            super(MessageHeaderDict, self).__setitem__(matchable_name, (canonical_name, value))
+            self.__fields[matchable_name] = (canonical_name, value)
         else:
-            super(MessageHeaderDict, self).__setitem__(matchable_name, (canonical_name, bstr(value)))
+            self.__fields[matchable_name] = (canonical_name, bstr(value))
 
     def __delitem__(self, name):
         matchable_name, _ = header_name(name)
-        super(MessageHeaderDict, self).__delitem__(matchable_name)
+        del self.__fields[matchable_name]
+
+    def __iter__(self):
+        return iter(self.__fields)
 
     def copy(self):
         return self.__class__(self)
 
-    def get(self, name, default=None):
-        matchable_name, _ = header_name(name)
-        try:
-            _, value = super(MessageHeaderDict, self).__getitem__(matchable_name)
-        except KeyError:
-            return default
-        else:
-            return value
-
-    def update(self, other=None, **kwargs):
-        if other:
-            try:
-                for name in other.keys():
-                    self[name] = other[name]
-            except AttributeError:
-                for name, value in other:
-                    self[name] = value
-        for name in kwargs:
-            self[name] = kwargs[name]
-
     def items(self):
-        return list(super(MessageHeaderDict, self).values())
+        return list(self.__fields.values())
 
     def keys(self):
-        return list(canonical_name for canonical_name, _ in super(MessageHeaderDict, self).values())
+        return list(canonical_name for canonical_name, _ in self.__fields.values())
 
     def values(self):
-        return list(value for _, value in super(MessageHeaderDict, self).values())
+        return list(value for _, value in self.__fields.values())
 
     def to_bytes(self):
         b = []

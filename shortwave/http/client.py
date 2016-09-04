@@ -26,7 +26,7 @@ from shortwave.concurrency import synchronized
 from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
 from shortwave.transmission import Connection
-from shortwave.uri import parse_authority
+from shortwave.uri import parse_uri, parse_authority
 
 HTTP_VERSION = b"HTTP/1.1"
 
@@ -71,20 +71,25 @@ header_names.update({
 })
 
 
+class HTTPHeaderDict(MessageHeaderDict):
+
+    def apply_authority(self, authority):
+        user_info, address = parse_authority(authority, 2)
+        if b"Host" not in self:
+            self[b"Host"] = address
+        if user_info and b"Authorization" not in self:
+            self[b"Authorization"] = basic_auth(user_info)
+
+
 class HTTP(Connection):
 
     def __init__(self, authority, receiver=None, rx_buffer_size=None, **headers):
-        user_info, host, port = parse_authority(authority)
-        if user_info:
-            headers[b"Authorization"] = basic_auth(user_info)
-        if port:
-            headers[b"Host"] = host + b":" + bstr(port)
-        else:
-            headers[b"Host"] = host
-        super(HTTP, self).__init__((host, port or HTTP_PORT), receiver, rx_buffer_size, headers)
+        _, host, port = parse_authority(authority)
+        super(HTTP, self).__init__((host, port or HTTP_PORT), receiver, rx_buffer_size)
         self.data_limit = b"\r\n"
         self.requests = deque()
-        self.request_headers = MessageHeaderDict(headers)
+        self.request_headers = HTTPHeaderDict(headers)
+        self.request_headers.apply_authority(authority)
         self.responses = deque()
         self.response_handler = self.on_status_line
 
@@ -198,7 +203,7 @@ class HTTP(Connection):
         response.http_version = bytes(http_version)
         response.status_code = int(status_code)
         response.reason_phrase = bytes(reason_phrase)
-        response.headers = MessageHeaderDict()
+        response.headers = HTTPHeaderDict()
         self.response_handler = self.on_header_line
         return True
 
@@ -267,42 +272,80 @@ class HTTP(Connection):
 class HTTPRequest(object):
 
     @classmethod
-    def get(cls, target, **headers):
-        return HTTPRequest(b"GET", target, **headers)
+    def get(cls, target, headers=None, **kwheaders):
+        headers = HTTPHeaderDict(headers or {}, **kwheaders)
+        scheme, authority, path_query, _ = parse_uri(target, 4)
+        if authority:
+            headers.apply_authority(authority)
+        if scheme is None or scheme == b"http":
+            return HTTPRequest(b"GET", path_query, headers=headers)
+        else:
+            raise ValueError("Unsupported scheme %r" % scheme)
 
     @classmethod
-    def head(cls, target, **headers):
-        return HTTPRequest(b"HEAD", target, **headers)
+    def head(cls, target, headers=None, **kwheaders):
+        headers = HTTPHeaderDict(headers or {}, **kwheaders)
+        scheme, authority, path_query, _ = parse_uri(target, 4)
+        if authority:
+            headers.apply_authority(authority)
+        if scheme is None or scheme == b"http":
+            return HTTPRequest(b"HEAD", path_query, headers=headers)
+        else:
+            raise ValueError("Unsupported scheme %r" % scheme)
 
     @classmethod
-    def post(cls, target, body, **headers):
-        return HTTPRequest(b"POST", target, body, **headers)
+    def post(cls, target, body, headers=None, **kwheaders):
+        headers = HTTPHeaderDict(headers or {}, **kwheaders)
+        scheme, authority, path_query, _ = parse_uri(target, 4)
+        if authority:
+            headers.apply_authority(authority)
+        if scheme is None or scheme == b"http":
+            return HTTPRequest(b"POST", path_query, body, headers=headers)
+        else:
+            raise ValueError("Unsupported scheme %r" % scheme)
 
     @classmethod
-    def put(cls, target, body, **headers):
-        return HTTPRequest(b"PUT", target, body, **headers)
+    def put(cls, target, body, headers=None, **kwheaders):
+        headers = HTTPHeaderDict(headers or {}, **kwheaders)
+        scheme, authority, path_query, _ = parse_uri(target, 4)
+        if authority:
+            headers.apply_authority(authority)
+        if scheme is None or scheme == b"http":
+            return HTTPRequest(b"PUT", path_query, body, headers=headers)
+        else:
+            raise ValueError("Unsupported scheme %r" % scheme)
 
     @classmethod
-    def delete(cls, target, **headers):
-        return HTTPRequest(b"DELETE", target, **headers)
+    def delete(cls, target, headers=None, **kwheaders):
+        headers = HTTPHeaderDict(headers or {}, **kwheaders)
+        scheme, authority, path_query, _ = parse_uri(target, 4)
+        if authority:
+            headers.apply_authority(authority)
+        if scheme is None or scheme == b"http":
+            return HTTPRequest(b"DELETE", path_query, headers=headers)
+        else:
+            raise ValueError("Unsupported scheme %r" % scheme)
 
     @classmethod
-    def connect(cls, target, **headers):
-        return HTTPRequest(b"CONNECT", target, **headers)
+    def connect(cls, target, headers=None, **kwheaders):
+        # TODO
+        return HTTPRequest(b"CONNECT", target, headers, **kwheaders)
 
     @classmethod
-    def options(cls, target=b"*", **headers):
-        return HTTPRequest(b"OPTIONS", target, **headers)
+    def options(cls, target=b"*", headers=None, **kwheaders):
+        # TODO
+        return HTTPRequest(b"OPTIONS", target, headers, **kwheaders)
 
     @classmethod
-    def trace(cls, target, **headers):
-        return HTTPRequest(b"TRACE", target, **headers)
+    def trace(cls, target, headers=None, **kwheaders):
+        # TODO
+        return HTTPRequest(b"TRACE", target, *headers, **kwheaders)
 
-    def __init__(self, method, target, body=None, **headers):
+    def __init__(self, method, target, body=None, headers=None, **kwheaders):
         self.method = method
         self.target = target
         self.body = body
-        self.headers = headers
+        self.headers = HTTPHeaderDict(headers or {}, **kwheaders)
 
 
 class HTTPResponse(object):

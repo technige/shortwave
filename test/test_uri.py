@@ -225,17 +225,16 @@ class ParseURITestCase(TestCase):
 
     def test_can_parse_into_3_parts(self):
         uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
-        scheme, authority, path_query_fragment = parse_uri(uri, 3)
+        scheme, authority_path_query, fragment = parse_uri(uri, 3)
         assert scheme == b"foo"
-        assert authority == b"bob@somewhere@example.com:8042"
-        assert path_query_fragment == b"/over/there?name=ferret#nose"
+        assert authority_path_query == b"//bob@somewhere@example.com:8042/over/there?name=ferret"
+        assert fragment == b"nose"
 
     def test_can_parse_into_2_parts(self):
         uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
-        scheme, scheme_specific_part = parse_uri(uri, 2)
-        assert scheme == b"foo"
-        assert scheme_specific_part == b"//bob@somewhere@example.com:8042" \
-                                       b"/over/there?name=ferret#nose"
+        core_uri, fragment = parse_uri(uri, 2)
+        assert core_uri == b"foo://bob@somewhere@example.com:8042/over/there?name=ferret"
+        assert fragment == b"nose"
 
     def test_cannot_parse_into_1_part(self):
         uri = b"foo://bob@somewhere@example.com:8042/over/there?name=ferret#nose"
@@ -483,6 +482,25 @@ class ParseAuthorityTestCase(TestCase):
         assert user_info == b"bob"
         assert host == b"example.com"
         assert port == 6789
+
+    def test_cannot_parse_into_4_parts(self):
+        with self.assertRaises(ValueError):
+            parse_authority(b"bob@example.com:6789", 4)
+
+    def test_can_parse_into_3_parts(self):
+        user_info, host, port = parse_authority(b"bob@example.com:6789", 3)
+        assert user_info == b"bob"
+        assert host == b"example.com"
+        assert port == 6789
+
+    def test_can_parse_into_2_parts(self):
+        user_info, address = parse_authority(b"bob@example.com:6789", 2)
+        assert user_info == b"bob"
+        assert address == b"example.com:6789"
+
+    def test_cannot_parse_into_1_part(self):
+        with self.assertRaises(ValueError):
+            parse_authority(b"bob@example.com:6789", 1)
 
 
 class BuildAuthorityTestCase(TestCase):

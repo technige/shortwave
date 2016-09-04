@@ -21,7 +21,7 @@ from os import write as os_write
 from sys import argv, stdin, stdout
 
 from shortwave.http import HTTP, HTTPResponse, HTTPRequest, basic_auth
-from shortwave.uri import parse_uri, build_uri
+from shortwave.uri import parse_uri
 from shortwave.watcher import watch
 
 
@@ -78,7 +78,7 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     http = None
     try:
         for uri in parsed.uri:
-            scheme, authority, target = parse_uri(uri.encode(arg_encoding), 3)
+            scheme, authority, target, fragment = parse_uri(uri.encode(arg_encoding), 4)
             if scheme and scheme != b"http":
                 raise ValueError("Non-HTTP URI: %r" % uri)
             if authority:
@@ -106,7 +106,7 @@ def post(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, target = parse_uri(parsed.uri.encode(arg_encoding), 3)
+    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(arg_encoding), 4)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     headers = {}
     if parsed.json:
@@ -131,7 +131,7 @@ def put(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, target = parse_uri(parsed.uri.encode(arg_encoding), 3)
+    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(arg_encoding), 4)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     headers = {}
     if parsed.json:
@@ -154,7 +154,7 @@ def delete(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, target = parse_uri(parsed.uri.encode(arg_encoding), 3)
+    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(arg_encoding), 4)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     headers = {}
     try:

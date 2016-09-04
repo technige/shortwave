@@ -89,26 +89,29 @@ def parse_uri(uri, parts=5):
 
     scheme = auth = path = query = fragment = None
 
-    # Scheme
-    q = uri.find(b":")
-    if q == -1:
-        start = 0
-    elif scheme_pattern.match(uri, 0, q):
-        scheme = uri[:q]
-        start = q + 1
-    else:
-        start = 0
+    start = 0
     end = len(uri)
 
-    if parts == 2:
-        return scheme, uri[start:end]
+    # Fragment
+    q = uri.find(b"#")
+    if q != -1:
+        fragment = uri[(q + 1):]
+        end = q
 
-    if parts >= 4:
-        # Fragment
-        q = uri.find(b"#", start)
-        if q != -1:
-            fragment = uri[(q + 1):]
-            end = q
+    if parts == 2:
+        return uri[:end], fragment
+
+    if parts >= 3:
+        # Scheme
+        q = uri.find(b":")
+        if q == -1:
+            start = 0
+        elif scheme_pattern.match(uri, 0, q):
+            scheme = uri[:q]
+            start = q + 1
+
+    if parts == 3:
+        return scheme, uri[start:end], fragment
 
     if parts >= 5:
         # Query
@@ -229,27 +232,36 @@ def resolve_uri(base_uri, ref_uri, strict=True):
                      query=target_query, fragment=target_fragment)
 
 
-def parse_authority(authority):
+def parse_authority(authority, parts=3):
+    if authority is None:
+        return [None] * parts
+
+    assert isinstance(authority, bytes)
+    parts = int(parts)
+    if not 2 <= parts <= 3:
+        raise ValueError("Can only parse authority into two or three component parts")
+
     user_info = host = port = None
 
-    if authority is not None:
+    assert isinstance(authority, bytes)
 
-        assert isinstance(authority, bytes)
+    # User info
+    p = authority.rfind(b"@")
+    if p != -1:
+        user_info = authority[:p]
+    p += 1
 
-        # User info
-        p = authority.rfind(b"@")
-        if p != -1:
-            user_info = authority[:p]
+    if parts == 2:
+        return user_info, authority[p:]
 
-        # Host and port
-        p += 1
-        q = authority.find(b":", p)
-        if q == -1:
-            host = authority[p:]
-        else:
-            host = authority[p:q]
-            q += 1
-            port = int(authority[q:])
+    # Host and port
+    q = authority.find(b":", p)
+    if q == -1:
+        host = authority[p:]
+    else:
+        host = authority[p:q]
+        q += 1
+        port = int(authority[q:])
 
     return user_info, host, port
 

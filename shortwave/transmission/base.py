@@ -34,7 +34,7 @@ class BaseTransmitter(object):
     sent.
     """
 
-    def __init__(self, socket, *args, **kwargs):
+    def __init__(self, socket):
         self.socket = socket
         self.fd = self.socket.fileno()
 
@@ -98,11 +98,11 @@ class BaseTransceiver(object):
         socket.setblocking(0)
         return socket
 
-    def __init__(self, address, receiver=None, rx_buffer_size=None, *args, **kwargs):
+    def __init__(self, address, receiver=None, rx_buffer_size=None):
         self.socket = self.new_socket(address)
         self.fd = self.socket.fileno()
         log.info("X[%d]: Connected to %s", self.fd, address)
-        self.transmitter = self.Tx(self.socket, *args, **kwargs)
+        self.transmitter = self.Tx(self.socket)
         if receiver:
             self.receiver = receiver
         else:
