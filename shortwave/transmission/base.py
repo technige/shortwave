@@ -20,8 +20,10 @@ from logging import getLogger
 from socket import socket as _socket, error as socket_error, \
     AF_INET, SOCK_STREAM, IPPROTO_TCP, TCP_NODELAY, SHUT_RD, SHUT_WR
 from threading import Thread
+from weakref import ref
 
 from shortwave.concurrency import synchronized
+from shortwave.uri import parse_authority
 
 log = getLogger("shortwave.transmission")
 
@@ -49,21 +51,30 @@ class BaseReceiver(Thread):
     conversations.
     """
 
+    buffer_size = default_buffer_size
+
     _stopped = False
 
     def __init__(self):
         super(BaseReceiver, self).__init__()
+        self.setDaemon(True)
         self.clients = {}
+
+    def __del__(self):
+        for transceiver_ref, _, _ in self.clients.values():
+            transceiver = transceiver_ref()
+            if transceiver:
+                transceiver.stop_rx()
 
     def __repr__(self):
         return "<%s at 0x%x>" % (self.__class__.__name__, id(self))
 
-    def attach(self, transceiver, buffer_size):
+    def attach(self, transceiver):
         fd = transceiver.socket.fileno()
-        buffer = bytearray(buffer_size or default_buffer_size)
+        buffer = bytearray(self.buffer_size)
         view = memoryview(buffer)
-        self.clients[fd] = (transceiver, buffer, view)
-        log.debug("Attached %r (buffer_size=%d) to %r", transceiver, buffer_size, self)
+        self.clients[fd] = (ref(transceiver), buffer, view)
+        log.debug("Attached %r (buffer_size=%d) to %r", transceiver, self.buffer_size, self)
 
     def run(self):
         # TODO: select-based default receiver
@@ -90,6 +101,8 @@ class BaseTransceiver(object):
     transmitter = None
     receiver = None
 
+    default_port = 0
+
     @staticmethod
     def new_socket(address):
         socket = _socket(AF_INET, SOCK_STREAM)
@@ -98,10 +111,13 @@ class BaseTransceiver(object):
         socket.setblocking(0)
         return socket
 
-    def __init__(self, address, receiver=None, rx_buffer_size=None):
-        self.socket = self.new_socket(address)
+    def __init__(self, authority, receiver=None):
+        self.user_info, self.host, self.port = parse_authority(authority)
+        if not self.port:
+            self.port = self.default_port
+        self.socket = self.new_socket((self.host, self.port))
         self.fd = self.socket.fileno()
-        log.info("X[%d]: Connected to %s", self.fd, address)
+        log.info("X[%d]: Connected to %s on port %d", self.fd, self.host, self.port)
         self.transmitter = self.Tx(self.socket)
         if receiver:
             self.receiver = receiver
@@ -109,7 +125,7 @@ class BaseTransceiver(object):
             self.receiver = self.Rx()
             self.receiver.stopped = lambda: self.stopped()
             self.receiver.start()
-        self.receiver.attach(self, rx_buffer_size)
+        self.receiver.attach(self)
 
     def __del__(self):
         self.close()

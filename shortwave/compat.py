@@ -21,6 +21,7 @@ try:
 except ImportError:
     from urllib import quote, unquote_plus as unquote
 
+default_encoding = "iso-8859-1"
 
 if version_info >= (3,):
     integer = int
@@ -28,7 +29,7 @@ if version_info >= (3,):
 
     SPACE = ord(' ')
 
-    def bstr(s, encoding="utf-8"):
+    def bstr(s, encoding=default_encoding):
         if isinstance(s, bytes):
             return s
         elif isinstance(s, bytearray):
@@ -38,7 +39,7 @@ if version_info >= (3,):
         else:
             return bytes(str(s), encoding)
 
-    def ustr(s, encoding="utf-8"):
+    def ustr(s, encoding=default_encoding):
         """ Convert argument to unicode string.
         """
         if isinstance(s, str):
@@ -48,7 +49,7 @@ if version_info >= (3,):
         except AttributeError:
             return str(s)
 
-    def xstr(s, encoding="utf-8"):
+    def xstr(s, encoding=default_encoding):
         """ Convert argument to string type returned by __str__.
         """
         if isinstance(s, str):
@@ -63,7 +64,7 @@ else:
 
     SPACE = b' '
 
-    def bstr(s, encoding="utf-8"):
+    def bstr(s, encoding=default_encoding):
         if isinstance(s, bytes):
             return s
         elif isinstance(s, bytearray):
@@ -73,7 +74,7 @@ else:
         else:
             return str(s)
 
-    def ustr(s, encoding="utf-8"):
+    def ustr(s, encoding=default_encoding):
         """ Convert argument to unicode string.
         """
         if isinstance(s, str):
@@ -81,7 +82,7 @@ else:
         else:
             return unicode(s)
 
-    def xstr(s, encoding="utf-8"):
+    def xstr(s, encoding=default_encoding):
         """ Convert argument to string type returned by __str__.
         """
         if isinstance(s, str):

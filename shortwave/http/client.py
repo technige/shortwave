@@ -83,9 +83,10 @@ class HTTPHeaderDict(MessageHeaderDict):
 
 class HTTP(Connection):
 
-    def __init__(self, authority, receiver=None, rx_buffer_size=None, **headers):
-        _, host, port = parse_authority(authority)
-        super(HTTP, self).__init__((host, port or HTTP_PORT), receiver, rx_buffer_size)
+    default_port = HTTP_PORT
+
+    def __init__(self, authority, receiver=None, **headers):
+        super(HTTP, self).__init__(authority, receiver)
         self.data_limit = b"\r\n"
         self.requests = deque()
         self.request_headers = HTTPHeaderDict(headers)

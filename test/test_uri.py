@@ -62,11 +62,11 @@ class PercentEncodeTestCase(TestCase):
 
     def test_can_percent_encode_extended_chars(self):
         encoded = percent_encode("/El Niño/")
-        assert encoded == b"%2FEl%20Ni%C3%B1o%2F"
+        assert encoded == b'%2FEl%20Ni%F1o%2F'
 
     def test_can_percent_encode_with_safe_chars(self):
         encoded = percent_encode("/El Niño/", safe="/|\\")
-        assert encoded == b"/El%20Ni%C3%B1o/"
+        assert encoded == b'/El%20Ni%F1o/'
 
 
 class PercentDecodeTestCase(TestCase):

@@ -23,6 +23,8 @@ from shortwave.transmission import Connection
 
 class Echo(Connection):
 
-    def __init__(self, host, port=None, on_receive=print):
-        super(Echo, self).__init__((host, port or ECHO_PORT))
+    default_port = ECHO_PORT
+
+    def __init__(self, authority, on_receive=lambda x: print(x.tobytes().decode("iso-8859-1"))):
+        super(Echo, self).__init__(authority)
         self.on_receive = on_receive

@@ -48,10 +48,10 @@ class LinuxEventPollReceiver(BaseReceiver):
         super(LinuxEventPollReceiver, self).__init__()
         self._poll = epoll()
 
-    def attach(self, transceiver, buffer_size):
+    def attach(self, transceiver):
         fd = transceiver.socket.fileno()
         self._poll.register(fd, EPOLLET | EPOLLIN)
-        super(LinuxEventPollReceiver, self).attach(transceiver, buffer_size)
+        super(LinuxEventPollReceiver, self).attach(transceiver)
 
     def run(self):
         log.debug("Started %r", self)
@@ -68,7 +68,10 @@ class LinuxEventPollReceiver(BaseReceiver):
             log.debug("Stopped %r", self)
 
     def _handle_event(self, fd, event):
-        transceiver, buffer, view = self.clients[fd]
+        transceiver_ref, buffer, view = self.clients[fd]
+        transceiver = transceiver_ref()
+        if transceiver is None:
+            return
         if event & EPOLLIN:
             received = 0
             receiving = -1

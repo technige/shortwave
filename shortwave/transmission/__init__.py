@@ -39,8 +39,8 @@ class Connection(Transceiver):
 
     data_limit = None
 
-    def __init__(self, address, receiver=None, rx_buffer_size=None):
-        super(Connection, self).__init__(address, receiver, rx_buffer_size)
+    def __init__(self, authority, receiver=None):
+        super(Connection, self).__init__(authority, receiver)
         self.buffer = bytearray()
 
     def on_receive(self, view):
