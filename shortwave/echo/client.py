@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import print_function
+from sys import stdout
 
 from shortwave.numbers import ECHO_PORT
 from shortwave.transmission import Connection
@@ -25,6 +25,8 @@ class Echo(Connection):
 
     default_port = ECHO_PORT
 
-    def __init__(self, authority, on_receive=lambda x: print(x.tobytes().decode("iso-8859-1"))):
+    def __init__(self, authority):
         super(Echo, self).__init__(authority)
-        self.on_receive = on_receive
+
+    def on_receive(self, view):
+        stdout.write(view.tobytes().decode("iso-8859-1"))
