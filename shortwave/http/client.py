@@ -25,7 +25,7 @@ from shortwave.compat import bstr
 from shortwave.concurrency import synchronized
 from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
-from shortwave.transmission import Connection
+from shortwave.transmission import Connection, line_limiter, countdown_limiter
 from shortwave.uri import parse_uri, parse_authority
 
 HTTP_VERSION = b"HTTP/1.1"
@@ -71,6 +71,9 @@ header_names.update({
 })
 
 
+crlf_limiter = line_limiter(b"\r\n")
+
+
 class HTTPHeaderDict(MessageHeaderDict):
 
     def apply_authority(self, authority):
@@ -87,7 +90,7 @@ class HTTP(Connection):
 
     def __init__(self, authority, receiver=None, **headers):
         super(HTTP, self).__init__(authority, receiver)
-        self.data_limit = b"\r\n"
+        self.limiter = crlf_limiter
         self.requests = deque()
         self.request_headers = HTTPHeaderDict(headers)
         self.request_headers.apply_authority(authority)
@@ -195,7 +198,7 @@ class HTTP(Connection):
             if connection.lower() == b"close":
                 self.close()
             else:
-                self.data_limit = b"\r\n"
+                self.limiter = crlf_limiter
                 self.response_handler = self.on_status_line
 
     def on_status_line(self, response, data):
@@ -215,11 +218,11 @@ class HTTP(Connection):
             response.headers[name] = value.strip()
             return True
         if response.headers.get("transfer-encoding", b"").lower() == b"chunked":
-            self.data_limit = b"\r\n"
+            self.limiter = crlf_limiter
             self.response_handler = self.on_chunk_size
             return True
-        self.data_limit = int(response.headers.get("content-length", 0))
-        if self.data_limit:
+        self.limiter = countdown_limiter(int(response.headers.get("content-length", 0)))
+        if self.limiter.remaining():
             self.response_handler = self.on_body_data
             return True
         # TODO determine whether there is no content or whether content ends on close
@@ -233,16 +236,16 @@ class HTTP(Connection):
         try:
             response.on_body_data(data)
         finally:
-            self.data_limit -= len(data)
-            return bool(self.data_limit)
+            return bool(self.limiter.remaining())
 
     def on_chunk_size(self, response, data):
         # TODO: parse chunk extensions <https://tools.ietf.org/html/rfc7230#section-4.1.1>
-        self.data_limit = chunk_size = int(data, 16)
+        chunk_size = int(data, 16)
         if chunk_size == 0:
-            self.data_limit = b"\r\n"
+            self.limiter = crlf_limiter
             self.response_handler = self.on_final_chunk_trailer
         else:
+            self.limiter = countdown_limiter(chunk_size)
             self.response_handler = self.on_chunk_data
         return True
 
@@ -254,9 +257,8 @@ class HTTP(Connection):
         try:
             response.on_body_data(data)
         finally:
-            self.data_limit -= len(data)
-            if self.data_limit == 0:
-                self.data_limit = b"\r\n"
+            if self.limiter.remaining() == 0:
+                self.limiter = crlf_limiter
                 self.response_handler = self.on_chunk_trailer
             return True
 

@@ -37,39 +37,65 @@ class Connection(Transceiver):
     limiter.
     """
 
-    data_limit = None
+    limiter = None
 
     def __init__(self, authority, receiver=None):
         super(Connection, self).__init__(authority, receiver)
         self.buffer = bytearray()
 
     def on_receive(self, view):
-        from shortwave.compat import integer
         buffer = self.buffer
         buffer[len(buffer):] = view
         while buffer:
-            data_limit = self.data_limit
-            if data_limit is None:
+            limiter = self.limiter
+            if limiter is None:
                 try:
                     self.on_data(buffer)
                 finally:
                     del buffer[:]
-            elif isinstance(data_limit, integer):
-                try:
-                    self.on_data(buffer[:data_limit])
-                finally:
-                    del buffer[:data_limit]
-            elif isinstance(data_limit, bytes):
-                end = buffer.find(data_limit)
-                if end == -1:
-                    break
-                try:
-                    self.on_data(buffer[:end])
-                finally:
-                    end += len(data_limit)
-                    del buffer[:end]
+            elif callable(limiter):
+                data = limiter(buffer)
+                if data is not None:
+                    try:
+                        self.on_data(data)
+                    finally:
+                        pass
             else:
-                raise TypeError("Unsupported limiter %r" % data_limit)
+                raise TypeError("Unsupported limiter %r" % limiter)
 
     def on_data(self, data):
         pass
+
+
+def line_limiter(eol):
+    eol_size = len(eol)
+
+    def f(buffer):
+        p = buffer.find(eol)
+        if p >= 0:
+            data = buffer[:p]
+            p += eol_size
+            del buffer[:p]
+            return data
+
+    return f
+
+
+def countdown_limiter(total):
+    remaining = [total]
+
+    def f(buffer):
+        buffer_size = len(buffer)
+        if buffer_size >= remaining[0]:
+            data = buffer[:remaining[0]]
+            del buffer[:remaining[0]]
+            remaining[0] = 0
+            return data
+        elif buffer_size > 0:
+            data = buffer[:]
+            del buffer[:]
+            remaining[0] -= buffer_size
+            return data
+
+    f.remaining = lambda: remaining[0]
+    return f
