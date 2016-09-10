@@ -132,6 +132,12 @@ class BaseTransceiver(object):
     def __repr__(self):
         return "<%s #%d>" % (self.__class__.__name__, self.fd)
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
     def transmit(self, *data):
         self.transmitter.transmit(*data)
 

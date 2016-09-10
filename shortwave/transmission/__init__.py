@@ -51,12 +51,6 @@ class Connection(Transceiver):
             from sys import stdout
             self.out = stdout
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        self.close()
-
     def on_receive(self, view):
         buffer = self.buffer
         buffer[len(buffer):] = view
