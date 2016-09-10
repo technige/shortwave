@@ -37,11 +37,25 @@ class Connection(Transceiver):
     limiter.
     """
 
+    encoding = "ISO-8859-1"
     limiter = None
 
-    def __init__(self, authority, receiver=None):
-        super(Connection, self).__init__(authority, receiver)
+    def __init__(self, authority, default_port=None, on_data=None, receiver=None, out=None):
+        super(Connection, self).__init__(authority, default_port, receiver)
         self.buffer = bytearray()
+        if on_data is not None:
+            self.on_data = on_data
+        if out:
+            self.out = out
+        else:
+            from sys import stdout
+            self.out = stdout
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
 
     def on_receive(self, view):
         buffer = self.buffer
@@ -64,7 +78,8 @@ class Connection(Transceiver):
                 raise TypeError("Unsupported limiter %r" % limiter)
 
     def on_data(self, data):
-        pass
+        out = self.out
+        out.write(data.decode(self.encoding))
 
 
 def line_limiter(eol):

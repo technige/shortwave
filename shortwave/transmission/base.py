@@ -111,10 +111,9 @@ class BaseTransceiver(object):
         socket.setblocking(0)
         return socket
 
-    def __init__(self, authority, receiver=None):
-        self.user_info, self.host, self.port = parse_authority(authority)
-        if not self.port:
-            self.port = self.default_port
+    def __init__(self, authority, default_port=0, receiver=None):
+        self.user_info, self.host, port = parse_authority(authority)
+        self.port = port or default_port or self.default_port
         self.socket = self.new_socket((self.host, self.port))
         self.fd = self.socket.fileno()
         log.info("X[%d]: Connected to %s on port %d", self.fd, self.host, self.port)

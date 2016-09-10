@@ -32,9 +32,10 @@ package_metadata = {
     "long_description": "Shortwave is a library of components for Python network applications.",
     "author": __author__,
     "author_email": __email__,
-    "url": "http://shortwave.fm/",
+    "url": "http://shortwave.tech/",
     "entry_points": {
         "console_scripts": [
+            "shortwave = shortwave.__main__:main",
             "shortwave.http = shortwave.http.__main__:main",
         ],
     },

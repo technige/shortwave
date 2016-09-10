@@ -51,7 +51,7 @@ def usage():
     print("       shortwave.http delete <uri>")
 
 
-def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
+def safe_request(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri [uri ...]".format(method))
     parser.add_argument("-1", "--single-receiver", action="store_true")
     parser.add_argument("-p", "--password")
@@ -78,7 +78,7 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     http = None
     try:
         for uri in parsed.uri:
-            scheme, authority, target, fragment = parse_uri(uri.encode(arg_encoding), 4)
+            scheme, authority, target, fragment = parse_uri(uri.encode(encoding), 4)
             if scheme and scheme != b"http":
                 raise ValueError("Non-HTTP URI: %r" % uri)
             if authority:
@@ -92,7 +92,7 @@ def safe_request(prog, method, *args, arg_encoding="UTF-8", out=stdout):
             receiver.stop()
 
 
-def post(prog, method, *args, arg_encoding="UTF-8", out=stdout):
+def post(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
     parser.add_argument("-j", "--json", action="store_true")
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
@@ -106,7 +106,7 @@ def post(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(arg_encoding), 4)
+    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(encoding), 4)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     headers = {}
     if parsed.json:
@@ -117,7 +117,7 @@ def post(prog, method, *args, arg_encoding="UTF-8", out=stdout):
         http.close()
 
 
-def put(prog, method, *args, arg_encoding="UTF-8", out=stdout):
+def put(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
     parser.add_argument("-j", "--json", action="store_true")
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
@@ -131,7 +131,7 @@ def put(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(arg_encoding), 4)
+    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(encoding), 4)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     headers = {}
     if parsed.json:
@@ -142,7 +142,7 @@ def put(prog, method, *args, arg_encoding="UTF-8", out=stdout):
         http.close()
 
 
-def delete(prog, method, *args, arg_encoding="UTF-8", out=stdout):
+def delete(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri".format(method))
     parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -154,7 +154,7 @@ def delete(prog, method, *args, arg_encoding="UTF-8", out=stdout):
     if parsed.very_verbose:
         watch("shortwave.transmission", level=DEBUG)
 
-    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(arg_encoding), 4)
+    scheme, authority, target, fragment = parse_uri(parsed.uri.encode(encoding), 4)
     http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
     headers = {}
     try:
@@ -172,15 +172,15 @@ def main():
     if len(argv) == 1 or argv[1] == "help":
         usage()
     elif argv[1] == "get":
-        get(*argv, arg_encoding=stdin.encoding, out=stdout)
+        get(*argv, encoding=stdin.encoding, out=stdout)
     elif argv[1] == "head":
-        head(*argv, arg_encoding=stdin.encoding, out=stdout)
+        head(*argv, encoding=stdin.encoding, out=stdout)
     elif argv[1] == "post":
-        post(*argv, arg_encoding=stdin.encoding, out=stdout)
+        post(*argv, encoding=stdin.encoding, out=stdout)
     elif argv[1] == "put":
-        put(*argv, arg_encoding=stdin.encoding, out=stdout)
+        put(*argv, encoding=stdin.encoding, out=stdout)
     elif argv[1] == "delete":
-        delete(*argv, arg_encoding=stdin.encoding, out=stdout)
+        delete(*argv, encoding=stdin.encoding, out=stdout)
     else:
         usage()
 
