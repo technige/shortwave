@@ -16,4 +16,6 @@
 # limitations under the License.
 
 from .meta import *
+
+from .connection import *
 from .transmission import *

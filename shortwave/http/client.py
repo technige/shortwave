@@ -21,11 +21,11 @@ from json import dumps as json_dumps
 from logging import getLogger
 from threading import Event
 
+from shortwave import Connection, line_limiter, countdown_limiter
 from shortwave.compat import bstr
 from shortwave.concurrency import synchronized
 from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
 from shortwave.numbers import HTTP_PORT
-from shortwave.transmission import Connection, line_limiter, countdown_limiter
 from shortwave.uri import parse_uri, parse_authority
 
 HTTP_VERSION = b"HTTP/1.1"
@@ -105,6 +105,7 @@ class HTTP(Connection):
 
         data = []
         append = data.append
+        requests = self.requests
 
         def transmit_():
             if data:
@@ -114,8 +115,8 @@ class HTTP(Connection):
                 self.transmitter.transmit(*data)
                 data[:] = []
 
-        while self.requests:
-            request = self.requests.popleft()
+        while requests:
+            request = requests.popleft()
 
             method = request.method
             target = request.target

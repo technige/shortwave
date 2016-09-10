@@ -168,7 +168,7 @@ head = safe_request
 
 
 def main():
-    argv[0] = "shortwave.http"
+    argv[0] = "sw.http"
     if len(argv) == 1 or argv[1] == "help":
         usage()
     elif argv[1] == "get":

@@ -35,8 +35,8 @@ package_metadata = {
     "url": "http://shortwave.tech/",
     "entry_points": {
         "console_scripts": [
-            "shortwave = shortwave.__main__:main",
-            "shortwave.http = shortwave.http.__main__:main",
+            "sw = shortwave.__main__:main",
+            "sw.http = shortwave.http.__main__:main",
         ],
     },
     "packages": packages,
