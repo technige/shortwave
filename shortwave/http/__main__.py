@@ -81,6 +81,8 @@ def safe_request(prog, method, *args, encoding="UTF-8", out=stdout):
             scheme, authority, target, fragment = parse_uri(uri.encode(encoding), 4)
             if scheme and scheme != b"http":
                 raise ValueError("Non-HTTP URI: %r" % uri)
+            if http is None and not authority:
+                authority = b"127.0.0.1"
             if authority:
                 http = HTTP(authority, receiver, rx_buffer_size=parsed.rx_buffer_size)
                 connections.append(http)
