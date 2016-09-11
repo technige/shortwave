@@ -25,7 +25,7 @@ from shortwave import Connection, line_limiter, countdown_limiter
 from shortwave.compat import bstr
 from shortwave.concurrency import synchronized
 from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
-from shortwave.numbers import HTTP_PORT
+from shortwave.numbers import HTTP_PORT, HTTPS_PORT
 from shortwave.uri import parse_uri, parse_authority
 
 HTTP_VERSION = b"HTTP/1.1"
@@ -87,9 +87,10 @@ class HTTPHeaderDict(MessageHeaderDict):
 class HTTP(Connection):
 
     default_port = HTTP_PORT
+    secure = False
 
     def __init__(self, authority, receiver=None, **headers):
-        super(HTTP, self).__init__(authority, receiver)
+        super(HTTP, self).__init__(authority, secure=self.secure, receiver=receiver)
         self.limiter = crlf_limiter
         self.requests = deque()
         self.request_headers = HTTPHeaderDict(headers)
@@ -271,6 +272,12 @@ class HTTP(Connection):
     def on_final_chunk_trailer(self, response, data):
         # TODO: parse chunk trailer <https://tools.ietf.org/html/rfc7230#section-4.1.2>
         return False
+
+
+class HTTPS(HTTP):
+
+    default_port = HTTPS_PORT
+    secure = True
 
 
 class HTTPRequest(object):

@@ -28,13 +28,11 @@ class Connection(Transceiver):
     encoding = "ISO-8859-1"
     limiter = None
 
-    def __init__(self, authority, default_port=None, on_data=None, receiver=None, out=None):
-        super(Connection, self).__init__(authority, default_port, receiver)
+    def __init__(self, authority, default_port=None, secure=False, on_data=None, receiver=None):
+        super(Connection, self).__init__(authority, default_port, secure=secure, receiver=receiver)
         self.buffer = bytearray()
         if on_data is not None:
             self.on_data = on_data
-        if out:
-            self.out = out
         else:
             from sys import stdout
             self.out = stdout
@@ -60,8 +58,8 @@ class Connection(Transceiver):
                 raise TypeError("Unsupported limiter %r" % limiter)
 
     def on_data(self, data):
-        out = self.out
-        out.write(data.decode(self.encoding))
+        from sys import stdout
+        stdout.write(data.decode(self.encoding))
 
 
 def line_limiter(eol):

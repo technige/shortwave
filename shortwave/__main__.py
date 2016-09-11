@@ -23,7 +23,7 @@ from shortwave import Connection
 from shortwave.watcher import watch
 
 
-def shortwave(prog, *args, encoding="iso-8859-1", out=stdout):
+def shortwave(prog, *args, encoding="iso-8859-1"):
     parser = ArgumentParser(prog)
     parser.add_argument("-v", "--verbose", action="count")
     parser.add_argument("authority")
@@ -38,13 +38,13 @@ def shortwave(prog, *args, encoding="iso-8859-1", out=stdout):
     #         out.write("{:02X}".format(b))
     #     out.write("\r\n")
 
-    with Connection(parsed.authority.encode(encoding), out=out, on_data=None) as connection:
+    with Connection(parsed.authority.encode(encoding), on_data=None) as connection:
         for line in stdin:
             connection.transmit(line.encode(encoding))
 
 
 def main():
-    shortwave("sw", *argv[1:], encoding=stdin.encoding, out=stdout)
+    shortwave("sw", *argv[1:], encoding=stdin.encoding)
 
 
 if __name__ == "__main__":

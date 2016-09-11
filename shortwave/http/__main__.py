@@ -20,7 +20,7 @@ from logging import INFO, DEBUG
 from os import write as os_write
 from sys import argv, stdin, stdout
 
-from shortwave.http import HTTP, HTTPResponse, HTTPRequest, basic_auth
+from shortwave.http import HTTP, HTTPS, HTTPResponse, HTTPRequest, basic_auth
 from shortwave.uri import parse_uri
 from shortwave.watcher import watch
 
@@ -55,7 +55,7 @@ def safe_request(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri [uri ...]".format(method))
     parser.add_argument("-1", "--single-receiver", action="store_true")
     parser.add_argument("-p", "--password")
-    parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
+    parser.add_argument("-s", "--secure", action="store_true")
     parser.add_argument("-u", "--user")
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--very-verbose", action="store_true")
@@ -75,21 +75,22 @@ def safe_request(prog, method, *args, encoding="UTF-8", out=stdout):
     if parsed.user or parsed.password:
         headers[b"Authorization"] = basic_auth(parsed.user, parsed.password)
     connections = []
-    http = None
+    http = HTTPS if parsed.secure else HTTP
+    client = None
     try:
         for uri in parsed.uri:
             scheme, authority, target, fragment = parse_uri(uri.encode(encoding), 4)
             if scheme and scheme != b"http":
                 raise ValueError("Non-HTTP URI: %r" % uri)
-            if http is None and not authority:
+            if client is None and not authority:
                 authority = b"127.0.0.1"
             if authority:
-                http = HTTP(authority, receiver, rx_buffer_size=parsed.rx_buffer_size)
-                connections.append(http)
-            http.append(getattr(HTTPRequest, method)(target, **headers), ResponseWriter(out))
+                client = http(authority, receiver=receiver)
+                connections.append(client)
+            client.append(getattr(HTTPRequest, method)(target, **headers), ResponseWriter(out))
     finally:
-        for http in connections:
-            http.close()
+        for client in connections:
+            client.close()
         if receiver:
             receiver.stop()
 
@@ -97,7 +98,6 @@ def safe_request(prog, method, *args, encoding="UTF-8", out=stdout):
 def post(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
     parser.add_argument("-j", "--json", action="store_true")
-    parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--very-verbose", action="store_true")
     parser.add_argument("uri")
@@ -109,7 +109,7 @@ def post(prog, method, *args, encoding="UTF-8", out=stdout):
         watch("shortwave.transmission", level=DEBUG)
 
     scheme, authority, target, fragment = parse_uri(parsed.uri.encode(encoding), 4)
-    http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
+    http = HTTP(authority, connection="close")
     headers = {}
     if parsed.json:
         headers["content_type"] = b"application/json"
@@ -122,7 +122,6 @@ def post(prog, method, *args, encoding="UTF-8", out=stdout):
 def put(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri body".format(method))
     parser.add_argument("-j", "--json", action="store_true")
-    parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--very-verbose", action="store_true")
     parser.add_argument("uri")
@@ -134,7 +133,7 @@ def put(prog, method, *args, encoding="UTF-8", out=stdout):
         watch("shortwave.transmission", level=DEBUG)
 
     scheme, authority, target, fragment = parse_uri(parsed.uri.encode(encoding), 4)
-    http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
+    http = HTTP(authority, connection="close")
     headers = {}
     if parsed.json:
         headers["content_type"] = b"application/json"
@@ -146,7 +145,6 @@ def put(prog, method, *args, encoding="UTF-8", out=stdout):
 
 def delete(prog, method, *args, encoding="UTF-8", out=stdout):
     parser = ArgumentParser(prog, usage="%(prog)s {:s} [options] uri".format(method))
-    parser.add_argument("-r", "--rx-buffer-size", metavar="SIZE", default=4194304)
     parser.add_argument("-v", "--verbose", action="store_true")
     parser.add_argument("-vv", "--very-verbose", action="store_true")
     parser.add_argument("uri")
@@ -157,7 +155,7 @@ def delete(prog, method, *args, encoding="UTF-8", out=stdout):
         watch("shortwave.transmission", level=DEBUG)
 
     scheme, authority, target, fragment = parse_uri(parsed.uri.encode(encoding), 4)
-    http = HTTP(authority, rx_buffer_size=parsed.rx_buffer_size, connection="close")
+    http = HTTP(authority, connection="close")
     headers = {}
     try:
         http.append(HTTPRequest.delete(target, **headers), ResponseWriter(out))

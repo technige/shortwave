@@ -17,8 +17,7 @@
 
 from errno import ENOTCONN, EBADF
 from logging import getLogger
-from socket import socket as _socket, error as socket_error, \
-    AF_INET, SOCK_STREAM, IPPROTO_TCP, TCP_NODELAY, SHUT_RD, SHUT_WR
+from socket import error as socket_error, SHUT_RD, SHUT_WR
 from threading import Thread
 from weakref import ref
 
@@ -103,18 +102,32 @@ class BaseTransceiver(object):
 
     default_port = 0
 
-    @staticmethod
-    def new_socket(address):
-        socket = _socket(AF_INET, SOCK_STREAM)
-        socket.connect(address)
-        socket.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
-        socket.setblocking(0)
-        return socket
+    @classmethod
+    def new_socket(cls, host, port, secure=False):
+        from socket import socket, AF_INET, SOCK_STREAM, IPPROTO_TCP, TCP_NODELAY
+        s = socket(AF_INET, SOCK_STREAM)
+        s.setsockopt(IPPROTO_TCP, TCP_NODELAY, 1)
+        s.connect((host, port))
+        if secure:
+            from ssl import SSLContext, HAS_SNI, PROTOCOL_SSLv23
+            ssl_context = SSLContext(PROTOCOL_SSLv23)
+            try:
+                from ssl import OP_NO_SSLv2, OP_NO_SSLv3
+            except ImportError:
+                pass
+            else:
+                ssl_context.options |= OP_NO_SSLv2 | OP_NO_SSLv3
+            ssl_kwargs = {}
+            if HAS_SNI:
+                ssl_kwargs["server_hostname"] = host
+            s = ssl_context.wrap_socket(s, **ssl_kwargs)
+        s.setblocking(False)
+        return s
 
-    def __init__(self, authority, default_port=0, receiver=None):
+    def __init__(self, authority, default_port=0, secure=False, receiver=None):
         self.user_info, self.host, port = parse_authority(authority)
         self.port = port or default_port or self.default_port
-        self.socket = self.new_socket((self.host, self.port))
+        self.socket = self.new_socket(self.host, self.port, secure=secure)
         self.fd = self.socket.fileno()
         log.info("X[%d]: Connected to %s on port %d", self.fd, self.host, self.port)
         self.transmitter = self.Tx(self.socket)
@@ -130,7 +143,12 @@ class BaseTransceiver(object):
         self.close()
 
     def __repr__(self):
-        return "<%s #%d>" % (self.__class__.__name__, self.fd)
+        if hasattr(self.socket, "cipher"):
+            return "<%s #%d cipher=%r compression=%r>" % (self.__class__.__name__, self.fd,
+                                                          self.socket.cipher(),
+                                                          self.socket.compression())
+        else:
+            return "<%s #%d>" % (self.__class__.__name__, self.fd)
 
     def __enter__(self):
         return self

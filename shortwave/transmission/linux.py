@@ -17,9 +17,9 @@
 
 from errno import EAGAIN, EBADF
 from logging import getLogger
-from socket import IPPROTO_TCP, TCP_CORK
+from socket import IPPROTO_TCP, TCP_CORK, error as socket_error
 from select import epoll, EPOLLET, EPOLLIN, EPOLLHUP
-from socket import error as socket_error
+from ssl import SSLWantReadError
 
 from shortwave.transmission.base import BaseTransmitter, BaseReceiver, BaseTransceiver
 
@@ -81,6 +81,9 @@ class LinuxEventPollReceiver(BaseReceiver):
                 except AttributeError:
                     # The socket has probably been closed
                     receiving = 0
+                except SSLWantReadError:
+                    # Not enough data, let's go round again
+                    continue
                 except socket_error as error:
                     if error.errno in (EAGAIN, EBADF):
                         # EBADF: The socket has probably been disconnected in between
