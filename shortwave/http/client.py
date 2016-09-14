@@ -24,7 +24,7 @@ from threading import Event
 from shortwave import Connection, line_limiter, countdown_limiter
 from shortwave.compat import bstr
 from shortwave.concurrency import synchronized
-from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names
+from shortwave.messaging import SP, CRLF, MessageHeaderDict, header_names, parse_header
 from shortwave.numbers import HTTP_PORT, HTTPS_PORT
 from shortwave.uri import parse_uri, parse_authority
 
@@ -135,6 +135,7 @@ class HTTP(Connection):
             append(CRLF)
 
             if body is None:
+                headers.update(request.headers)
                 append(headers.to_bytes())
                 append(CRLF)
 
@@ -365,7 +366,12 @@ class HTTPResponse(object):
     status_code = None
     reason_phrase = None
     headers = None
+    body = None
     end = None
+
+    _content = None
+    _content_type = None
+    _charset = None
 
     def __new__(cls, *args, **kwargs):
         inst = object.__new__(cls)
@@ -381,16 +387,56 @@ class HTTPResponse(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         pass
 
-    def __getitem__(self, name):
-        return self.headers[name]
-
     def on_body_data(self, data):
-        # TODO: buffer raw data and coerce to typed content for certain content types
-        self.on_content(data)
+        if self.body is None:
+            self.body = bytearray()
+        self.body[len(self.body):] = data
 
-    def on_content(self, data):
-        pass
+    def _parse_content_type(self):
+        try:
+            content_type, params = parse_header(self.headers[b"Content-Type"])
+        except KeyError:
+            self._content_type = "application/octet-stream"
+            self._charset = "ISO-8859-1"
+        else:
+            self._content_type = content_type.decode("iso-8859-1")
+            self._charset = params.get(b"charset", b"ISO-8859-1").decode("iso-8859-1")
+
+    @property
+    def content_type(self):
+        if self._content_type is None:
+            self._parse_content_type()
+        return self._content_type
+
+    @property
+    def charset(self):
+        if self._charset is None:
+            self._parse_content_type()
+        return self._charset
+
+    @property
+    def content(self):
+        self.end.wait()
+        content_type = self.content_type
+        if content_type == "application/json":
+            from json import loads as json_loads
+            return json_loads(self.body.decode(self.charset))
+        else:
+            return self.body
 
 
 def basic_auth(*args):
     return b"Basic " + b64encode(b":".join(map(bstr, args)))
+
+
+def get(uri, headers=None, **kwheaders):
+    scheme, authority, target, fragment = parse_uri(uri, 4)
+    if scheme == b"http":
+        http = HTTP
+    else:
+        raise ValueError("Unsupported scheme %r" % scheme)
+    with http(authority) as client:
+        request = HTTPRequest.get(target, headers, **kwheaders)
+        response = HTTPResponse()
+        client.append(request, response)
+    return response

@@ -82,7 +82,9 @@ def parse_uri(uri, parts=5):
     if uri is None:
         return [None] * parts
 
-    assert isinstance(uri, bytes)
+    if not isinstance(uri, (bytes, bytearray)):
+        raise TypeError("URI must be bytes or bytearray")
+
     parts = int(parts)
     if not 2 <= parts <= 5:
         raise ValueError("Can only parse URI into two, three, four or five component parts")
