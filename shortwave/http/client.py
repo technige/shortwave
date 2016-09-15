@@ -355,7 +355,7 @@ class HTTPRequest(object):
 
     def __init__(self, method, target, body=None, headers=None, **kwheaders):
         self.method = method
-        self.target = target
+        self.target = target or b"/"
         self.body = body
         self.headers = HTTPHeaderDict(headers or {}, **kwheaders)
 
@@ -369,9 +369,9 @@ class HTTPResponse(object):
     body = None
     end = None
 
+    _charset = None
     _content = None
     _content_type = None
-    _charset = None
 
     def __new__(cls, *args, **kwargs):
         inst = object.__new__(cls)
@@ -397,10 +397,13 @@ class HTTPResponse(object):
             content_type, params = parse_header(self.headers[b"Content-Type"])
         except KeyError:
             self._content_type = "application/octet-stream"
-            self._charset = "ISO-8859-1"
+            self._charset = None
         else:
             self._content_type = content_type.decode("iso-8859-1")
-            self._charset = params.get(b"charset", b"ISO-8859-1").decode("iso-8859-1")
+            try:
+                self._charset = params[b"charset"].decode("iso-8859-1")
+            except KeyError:
+                self._charset = None
 
     @property
     def content_type(self):
@@ -410,19 +413,24 @@ class HTTPResponse(object):
 
     @property
     def charset(self):
-        if self._charset is None:
+        if self._content_type is None:
             self._parse_content_type()
-        return self._charset
+        return self._charset or "ISO-8859-1"
 
     @property
     def content(self):
-        self.end.wait()
-        content_type = self.content_type
-        if content_type == "application/json":
-            from json import loads as json_loads
-            return json_loads(self.body.decode(self.charset))
-        else:
-            return self.body
+        if self._content is None:
+            self.end.wait()
+            content_type = self.content_type
+            charset = self.charset
+            if content_type.startswith("text/"):
+                self._content = self.body.decode(charset)
+            elif content_type == "application/json":
+                from json import loads as json_loads
+                self._content = json_loads(self.body.decode(charset))
+            else:
+                self._content = self.body
+        return self._content
 
 
 def basic_auth(*args):

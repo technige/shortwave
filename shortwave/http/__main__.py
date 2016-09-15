@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import print_function
+
 from argparse import ArgumentParser
 from logging import INFO, DEBUG
 from os import write as os_write
@@ -74,22 +76,34 @@ def safe_request(prog, method, *args, encoding="UTF-8", out=stdout):
     headers = {}
     if parsed.user or parsed.password:
         headers[b"Authorization"] = basic_auth(parsed.user, parsed.password)
-    connections = []
+    clients = []
+    responses = []
     http = HTTPS if parsed.secure else HTTP
     client = None
     try:
         for uri in parsed.uri:
             scheme, authority, target, fragment = parse_uri(uri.encode(encoding), 4)
-            if scheme and scheme != b"http":
-                raise ValueError("Non-HTTP URI: %r" % uri)
+            if scheme is not None:
+                if scheme == b"http":
+                    http = HTTP
+                elif scheme == b"https":
+                    http = HTTPS
+                else:
+                    raise ValueError("Unsupported URI scheme: %r" % scheme)
             if client is None and not authority:
                 authority = b"127.0.0.1"
             if authority:
                 client = http(authority, receiver=receiver)
-                connections.append(client)
-            client.append(getattr(HTTPRequest, method)(target, **headers), ResponseWriter(out))
+                clients.append(client)
+            response = HTTPResponse()
+            responses.append(response)
+            client.append(getattr(HTTPRequest, method)(target, **headers), response)
+        for client in clients:
+            client.transmit()
+        for response in responses:
+            print(response.content, end="", file=out)
     finally:
-        for client in connections:
+        for client in clients:
             client.close()
         if receiver:
             receiver.stop()
