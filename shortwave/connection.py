@@ -16,7 +16,6 @@
 # limitations under the License.
 
 from shortwave.transmission import Transceiver
-from shortwave.uri import parse_uri
 
 
 class Connection(Transceiver):

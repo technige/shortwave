@@ -27,6 +27,7 @@ def shortwave(prog, *args, encoding="iso-8859-1"):
     parser = ArgumentParser(prog)
     parser.add_argument("-v", "--verbose", action="count")
     parser.add_argument("authority")
+    parser.add_argument("data", nargs="*")
     parsed = parser.parse_args(args)
     if parsed.verbose:
         watch("shortwave.transmission", level=DEBUG)
@@ -39,6 +40,16 @@ def shortwave(prog, *args, encoding="iso-8859-1"):
     #     out.write("\r\n")
 
     with Connection(parsed.authority.encode(encoding), on_data=None) as connection:
+        for data in parsed.data:
+            if data.startswith("#"):
+                data = data[1:]
+                count = len(data) // 2
+                b = bytearray(count)
+                for i in range(count):
+                    b[i] = int(data[2 * i], 16)
+                connection.transmit(b)
+            else:
+                connection.transmit(data.decode(encoding))
         for line in stdin:
             connection.transmit(line.encode(encoding))
 
