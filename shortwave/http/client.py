@@ -441,6 +441,8 @@ def get(uri, headers=None, **kwheaders):
     scheme, authority, target, fragment = parse_uri(uri, 4)
     if scheme == b"http":
         http = HTTP
+    elif scheme == b"https":
+        http = HTTPS
     else:
         raise ValueError("Unsupported scheme %r" % scheme)
     with http(authority) as client:
