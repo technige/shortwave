@@ -289,8 +289,8 @@ class HTTPRequest(object):
         scheme, authority, path_query, _ = parse_uri(target, 4)
         if authority:
             headers.apply_authority(authority)
-        if scheme is None or scheme == b"http":
-            return HTTPRequest(b"GET", path_query, headers=headers)
+        if scheme is None or scheme in (b"http", b"https"):
+            return HTTPRequest(scheme, authority, b"GET", path_query, headers=headers)
         else:
             raise ValueError("Unsupported scheme %r" % scheme)
 
@@ -300,8 +300,8 @@ class HTTPRequest(object):
         scheme, authority, path_query, _ = parse_uri(target, 4)
         if authority:
             headers.apply_authority(authority)
-        if scheme is None or scheme == b"http":
-            return HTTPRequest(b"HEAD", path_query, headers=headers)
+        if scheme is None or scheme in (b"http", b"https"):
+            return HTTPRequest(scheme, authority, b"HEAD", path_query, headers=headers)
         else:
             raise ValueError("Unsupported scheme %r" % scheme)
 
@@ -311,8 +311,8 @@ class HTTPRequest(object):
         scheme, authority, path_query, _ = parse_uri(target, 4)
         if authority:
             headers.apply_authority(authority)
-        if scheme is None or scheme == b"http":
-            return HTTPRequest(b"POST", path_query, body, headers=headers)
+        if scheme is None or scheme in (b"http", b"https"):
+            return HTTPRequest(scheme, authority, b"POST", path_query, body, headers=headers)
         else:
             raise ValueError("Unsupported scheme %r" % scheme)
 
@@ -322,8 +322,8 @@ class HTTPRequest(object):
         scheme, authority, path_query, _ = parse_uri(target, 4)
         if authority:
             headers.apply_authority(authority)
-        if scheme is None or scheme == b"http":
-            return HTTPRequest(b"PUT", path_query, body, headers=headers)
+        if scheme is None or scheme in (b"http", b"https"):
+            return HTTPRequest(scheme, authority, b"PUT", path_query, body, headers=headers)
         else:
             raise ValueError("Unsupported scheme %r" % scheme)
 
@@ -333,28 +333,30 @@ class HTTPRequest(object):
         scheme, authority, path_query, _ = parse_uri(target, 4)
         if authority:
             headers.apply_authority(authority)
-        if scheme is None or scheme == b"http":
-            return HTTPRequest(b"DELETE", path_query, headers=headers)
+        if scheme is None or scheme in (b"http", b"https"):
+            return HTTPRequest(scheme, authority, b"DELETE", path_query, headers=headers)
         else:
             raise ValueError("Unsupported scheme %r" % scheme)
 
     @classmethod
     def connect(cls, target, headers=None, **kwheaders):
         # TODO
-        return HTTPRequest(b"CONNECT", target, headers, **kwheaders)
+        return HTTPRequest(None, None, b"CONNECT", target, headers, **kwheaders)
 
     @classmethod
     def options(cls, target=b"*", headers=None, **kwheaders):
         # TODO
-        return HTTPRequest(b"OPTIONS", target, headers, **kwheaders)
+        return HTTPRequest(None, None, b"OPTIONS", target, headers, **kwheaders)
 
     @classmethod
     def trace(cls, target, headers=None, **kwheaders):
         # TODO
-        return HTTPRequest(b"TRACE", target, *headers, **kwheaders)
+        return HTTPRequest(None, None, b"TRACE", target, *headers, **kwheaders)
 
-    def __init__(self, method, target, body=None, headers=None, **kwheaders):
-        self.method = method
+    def __init__(self, scheme, authority, method, target, body=None, headers=None, **kwheaders):
+        self.scheme = scheme or b"http"
+        self.authority = authority or b"127.0.0.1"
+        self.method = method or b"GET"
         self.target = target or b"/"
         self.body = body
         self.headers = HTTPHeaderDict(headers or {}, **kwheaders)
@@ -438,15 +440,21 @@ def basic_auth(*args):
 
 
 def get(uri, headers=None, **kwheaders):
-    scheme, authority, target, fragment = parse_uri(uri, 4)
-    if scheme == b"http":
-        http = HTTP
-    elif scheme == b"https":
-        http = HTTPS
-    else:
-        raise ValueError("Unsupported scheme %r" % scheme)
-    with http(authority) as client:
-        request = HTTPRequest.get(target, headers, **kwheaders)
-        response = HTTPResponse()
-        client.append(request, response)
-    return response
+    redirects = 5
+    while redirects:
+        request = HTTPRequest.get(uri, headers, **kwheaders)
+        if request.scheme == b"http":
+            http = HTTP
+        elif request.scheme == b"https":
+            http = HTTPS
+        else:
+            raise ValueError("Unsupported scheme %r" % request.scheme)
+        with http(request.authority) as client:
+            response = HTTPResponse()
+            client.append(request, response)
+        client.sync()
+        if 300 <= response.status_code < 400:
+            uri = response.headers[b"Location"]
+            redirects -= 1
+        else:
+            return response

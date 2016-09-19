@@ -37,6 +37,7 @@ class Document(object):
     ready_state = None
 
     def __init__(self):
+        self.title = None
         self.lines = None
         self.height = None
         self.width = None
@@ -45,7 +46,8 @@ class Document(object):
     def load(self, source):
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(source, 'html.parser')
-        self.lines = soup.text.splitlines()
+        self.title = soup.title
+        self.lines = soup.body.text.splitlines()
         self.height = len(self.lines)
         self.width = max(map(len, self.lines))
         self.view = newpad(self.height, self.width)
@@ -71,8 +73,9 @@ class TitleBar(object):
 
 class BrowsingContext(object):
 
-    def __init__(self, window):
-        self.window = window
+    def __init__(self, tab):
+        self.tab = tab
+        self.window = self.tab.window
         self.documents = []
         self.active_document = -1
 
@@ -83,8 +86,10 @@ class BrowsingContext(object):
         self.active_document += 1
 
     def render(self, top):
+        document = self.documents[self.active_document]
         h, w = self.window.getmaxyx()
-        self.documents[self.active_document].view.refresh(top, 0, 1, 0, h - 3, w - 1)
+        self.tab.title_bar.set_title(document.title.string)
+        document.view.refresh(top, 0, 1, 0, h - 3, w - 1)
         self.window.refresh()
 
 
@@ -94,10 +99,9 @@ class Tab(object):
         self.window = window
         _, width = self.window.getmaxyx()
         self.title_bar = TitleBar(self.window.derwin(1, width, 0, 0))
-        self.browsing_context = BrowsingContext(self.window)
+        self.browsing_context = BrowsingContext(self)
 
     def navigate(self, resource):
-        self.title_bar.set_title(resource.decode("iso-8859-1"))
         self.browsing_context.navigate(resource)
 
     def render(self, top):
